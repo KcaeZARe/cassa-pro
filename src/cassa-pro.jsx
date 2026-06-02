@@ -1,4 +1,12 @@
 import { useState } from "react";
+// Registra Service Worker per uso offline
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  });
+}
+
+
 
 const STORAGE_KEY = "cassapro_v4";
 const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
