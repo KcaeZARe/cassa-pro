@@ -530,6 +530,54 @@ export default function App() {
               </Block>
 
               <button onClick={()=>window.print()} style={{width:"100%",background:"#0f1923",color:"#64748b",border:"1px solid #1e293b",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>🖨️ Stampa / Salva PDF</button>
+
+              <button onClick={()=>{
+                const blob = new Blob([JSON.stringify(all, null, 2)], {type:"application/json"});
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = `cassa-pro-backup-${year}.json`;
+                a.click();
+              }} style={{width:"100%",background:"#0f1923",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+                💾 Backup completo (JSON)
+              </button>
+
+              <button onClick={()=>{
+                const headers = ["Giorno","Bar","Risto","POS Bar","Tab Venduto","Tab POS","Tab Rimasti","Gratta Venduto","Gratta Pagati","Gratta Rimasti","Lotto Venduto","Lotto Pagati","Lotto Rimasti","Toto","Virtual","LIS","SISAL","Valori","Dist. Prelievo","Slot Raccolto","Slot Monete","Slot Refill","PF Oggi","PF Domani","Monete Oggi","Monete Domani","Debiti Oggi","Debiti Domani","Arrotondamento","Spese Contanti","Spese Elettronico","Movimento","Guadagno"];
+                const rows = Array.from({length:dim(year,month)},(_,i)=>{
+                  const d = all[dk(year,month,i+1)] || emptyDay();
+                  const c = calcDay(d);
+                  return [i+1,n(d.bar),n(d.risto),n(d.pos_bar),n(d.tab_venduto),n(d.tab_pos),c.tab_rim,n(d.gratta_venduto),n(d.gratta_pagati),c.gratta_rim,n(d.lotto_venduto),n(d.lotto_pagati),c.lotto_rim,n(d.toto),n(d.virtual),n(d.lis),n(d.sisal),n(d.valori),n(d.dist_prelievo),n(d.slot_raccolto),n(d.slot_monete),n(d.slot_refill),n(d.pf_oggi),n(d.pf_domani),n(d.monete_oggi),n(d.monete_domani),n(d.debiti_oggi),n(d.debiti_domani),n(d.arrotondamento),c.spese_cont,c.spese_ele,c.movimento,c.guadagno].join(";");
+                });
+                const aggiBar = AGGI_BAR_VOCI.map(v=>aggiLabel(v)+": "+totAggio(v).toFixed(2)).join(" | ");
+                const aggiTab = AGGI_TAB_VOCI.map(v=>aggiLabel(v)+": "+totAggio(v).toFixed(2)).join(" | ");
+                const summary = ["","RIEPILOGO "+MONTHS[month].toUpperCase()+" "+year,"Movimento mese;"+movMensile.toFixed(2),"Guadagno mese;"+mGuadagno.toFixed(2),"Aggi Bar;"+totAggiBar.toFixed(2),"Aggi Tabacchi;"+totAggiTab.toFixed(2),"Guadagno + Aggi;"+(mGuadagno+totAggi).toFixed(2),"Cassa accumulata;"+cassaAccumulata.toFixed(2),"Versato;"+totVersati.toFixed(2),"","Aggi Bar dettaglio;"+aggiBar,"Aggi Tab dettaglio;"+aggiTab].join("\n");
+                const csv = [headers.join(";"), ...rows, summary].join("\n");
+                const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "cassa-pro-"+MONTHS[month]+"-"+year+".csv";
+                a.click();
+              }} style={{width:"100%",background:"#0f1923",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+                📊 Esporta Excel/CSV ({MONTHS[month]} {year})
+              </button>
+
+              <label style={{display:"block",width:"100%",background:"#0f1923",color:"#a78bfa",border:"1px solid #3b0764",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8,textAlign:"center",boxSizing:"border-box"}}>
+                📂 Ripristina da backup (JSON)
+                <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    try {
+                      const imported = JSON.parse(ev.target.result);
+                      setAll(imported);
+                      persist(imported);
+                      alert("Backup ripristinato con successo!");
+                    } catch { alert("File non valido"); }
+                  };
+                  reader.readAsText(file);
+                }}/>
+              </label>
             </>}
 
           </div>
