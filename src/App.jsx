@@ -1,13 +1,4 @@
-import { useState } from "react";
-// Registra Service Worker per uso offline
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-  });
-}
-
-
-
+import { useState, useEffect } from "react";
 const STORAGE_KEY = "cassapro_v4";
 const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
 const persist = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
@@ -28,9 +19,14 @@ const nextDk = (y, m, d) => { const dt = new Date(y, m, d + 1); return dk(dt.get
 const mk = (y, m) => `aggi_${y}_${m}`;
 const vk = (y, m) => `versamenti_${y}_${m}`;
 
+const pk = (y, m) => `personale_${y}_${m}`;
+const emptyDipendente = () => ({ nome:"", stipendio:"", ore_mensili:"", maggiorazione:"25" });
+const emptyPresenza = () => ({ entrata:"", uscita:"", tipo:"lavoro", straordinari:"", anticipo:"", nota:"" });
+// tipo: lavoro | malattia | permesso | assenza | ferie
+
 const emptyDay = () => ({
   bar:"", risto:"", pos_bar:"",
-  tab_venduto:"", tab_pos:"",
+  tab_venduto:"", tab_pos:"", art_tabacchi:"",
   gratta_venduto:"", gratta_pagati:"",
   lotto_venduto:"", lotto_pagati:"",
   toto:"", virtual:"",
@@ -73,13 +69,13 @@ function calcDay(t) {
   const movimento =
     n(t.bar) + n(t.risto)
     + tab_rim + gratta_rim + lotto_rim
-    + n(t.toto) + n(t.virtual) + n(t.lis) + n(t.sisal) + n(t.valori)
+    + n(t.art_tabacchi) + n(t.toto) + n(t.virtual) + n(t.lis) + n(t.sisal) + n(t.valori)
     + n(t.dist_prelievo)
     + n(t.slot_raccolto) + n(t.slot_monete) - n(t.slot_refill)
     + pf_diff + monete_diff + debiti_diff
     - spese_cont
     + n(t.arrotondamento);
-  const guadagno = n(t.bar) + n(t.risto) + n(t.pos_bar) - spese_cont - spese_ele;
+  const guadagno = n(t.bar) + n(t.risto) + n(t.pos_bar) + n(t.art_tabacchi) - spese_cont - spese_ele;
   return { tab_rim, gratta_rim, lotto_rim, spese_cont, spese_ele, pf_diff, monete_diff, debiti_diff, movimento, guadagno };
 }
 
@@ -126,12 +122,19 @@ const TABS = [
   {id:"spese",label:"📋 Spese"},
   {id:"versamenti",label:"🏛️ Versamenti"},
   {id:"aggi",label:"📑 Aggi"},
+  {id:"personale",label:"👥 Personale"},
   {id:"riepilogo",label:"📊 Totali"},
 ];
 
 export default function App() {
   const now = new Date();
   const [all, setAll] = useState(load);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+    }
+  }, []);
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [day, setDay] = useState(now.getDate());
@@ -181,6 +184,63 @@ export default function App() {
   const totAggiTab = AGGI_TAB_VOCI.reduce((s,v)=>s+totAggio(v),0);
   const totAggi = totAggiBar + totAggiTab;
 
+  // ── PERSONALE ──
+  const PKEY = pk(year, month);
+  const personale = all[PKEY] || { dipendenti: [], presenze: {} };
+
+  const savePers = (updated) => { save({...all, [PKEY]: updated}); };
+
+  const addDipendente = () => {
+    const dips = [...(personale.dipendenti||[]), emptyDipendente()];
+    savePers({...personale, dipendenti: dips});
+  };
+  const updDipendente = (i, f, v) => {
+    const dips = [...(personale.dipendenti||[])];
+    dips[i] = {...dips[i], [f]: v};
+    savePers({...personale, dipendenti: dips});
+  };
+  const delDipendente = (i) => {
+    const dips = (personale.dipendenti||[]).filter((_,j)=>j!==i);
+    savePers({...personale, dipendenti: dips});
+  };
+
+  const presKey = (dipIdx, d) => `${dipIdx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+  const getPresenza = (dipIdx, d) => (personale.presenze||{})[presKey(dipIdx,d)] || emptyPresenza();
+  const updPresenza = (dipIdx, d, f, v) => {
+    const pk2 = presKey(dipIdx, d);
+    const presenze = {...(personale.presenze||{}), [pk2]: {...getPresenza(dipIdx,d), [f]: v}};
+    savePers({...personale, presenze});
+  };
+
+  const calcOre = (entrata, uscita) => {
+    if (!entrata || !uscita) return 0;
+    const [eh, em] = entrata.split(":").map(Number);
+    const [uh, um] = uscita.split(":").map(Number);
+    if (isNaN(eh)||isNaN(uh)) return 0;
+    const mins = (uh*60+um) - (eh*60+em);
+    return Math.max(0, mins/60);
+  };
+
+  const calcMensile = (dipIdx) => {
+    const dip = (personale.dipendenti||[])[dipIdx];
+    if (!dip) return { ore:0, paga:0, straordinari:0, anticipi:0, totale:0 };
+    const tariffa = n(dip.stipendio) / (n(dip.ore_mensili)||1);
+    let oreTot = 0, straoTot = 0, anticipiTot = 0;
+    const dim2 = new Date(year, month+1, 0).getDate();
+    for (let d=1; d<=dim2; d++) {
+      const p = getPresenza(dipIdx, d);
+      if (p.tipo === "lavoro") oreTot += calcOre(p.entrata, p.uscita);
+      straoTot += n(p.straordinari);
+      anticipiTot += n(p.anticipo);
+    }
+    const paga = oreTot * tariffa;
+    const totale = paga + straoTot - anticipiTot;
+    return { ore: oreTot, paga, straordinari: straoTot, anticipi: anticipiTot, totale };
+  };
+
+  const TIPO_LABEL = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
+  const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
+
   // Calcolo cassa accumulata (residuo mese precedente + movimenti mese corrente - versamenti)
   const days = dim(year, month);
 
@@ -200,7 +260,7 @@ export default function App() {
     return {day:i+1,data:d,calc:c};
   });
   // Un giorno è "reale" solo se ha almeno un incasso principale inserito
-  const hasRealData = (d) => d && (n(d.bar) || n(d.risto) || n(d.tab_venduto) || n(d.gratta_venduto) || n(d.lotto_venduto) || n(d.slot_raccolto) || n(d.dist_prelievo));
+  const hasRealData = (d) => d && (n(d.bar) || n(d.risto) || n(d.tab_venduto) || n(d.art_tabacchi) || n(d.gratta_venduto) || n(d.lotto_venduto) || n(d.slot_raccolto) || n(d.dist_prelievo));
   const movMensile = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.movimento:0),0);
   const cassaAccumulata = residuoPrecedente + movMensile - totVersati;
 
@@ -301,6 +361,10 @@ export default function App() {
               <Block title="Tabacchi" accent="#fbbf24">
                 <Row><Fld label="Venduto (€)" val={today.tab_venduto} set={v=>upd("tab_venduto",v)}/><Fld label="POS Tabacchi (€)" val={today.tab_pos} set={v=>upd("tab_pos",v)}/><Calc label="Rimasti (V−POS)" val={calc.tab_rim} color="#fbbf24"/></Row>
               </Block>
+              <Block title="Articoli Tabacchi" accent="#a3e635">
+                <Row><Fld label="Incasso Articoli (€)" val={today.art_tabacchi} set={v=>upd("art_tabacchi",v)}/></Row>
+                <div style={{fontSize:10,color:"#475569",marginBottom:6}}>↑ Entra nel movimento come il Bar</div>
+              </Block>
               <Block title="Distributore Sigarette" accent="#f97316">
                 <Row>
                   <Fld label="Prelievo (€)" val={today.dist_prelievo} set={v=>upd("dist_prelievo",v)}/>
@@ -324,9 +388,9 @@ export default function App() {
               <Block title="Lotto" accent="#f97316">
                 <Row><Fld label="Venduto (€)" val={today.lotto_venduto} set={v=>upd("lotto_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.lotto_pagati} set={v=>upd("lotto_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.lotto_rim} color="#f97316"/></Row>
               </Block>
-              <Block title="Toto / Virtual / LIS / SISAL / Valori" accent="#34d399">
+              <Block title="Scommesse / Virtual / LIS / SISAL / Valori" accent="#34d399">
                 <div style={{fontSize:10,color:"#475569",marginBottom:10}}>↓ Inserisci direttamente la rimanenza già calcolata</div>
-                <Row><Fld label="Toto (€)" val={today.toto} set={v=>upd("toto",v)}/><Fld label="Virtual (€)" val={today.virtual} set={v=>upd("virtual",v)}/></Row>
+                <Row><Fld label="Scommesse (€)" val={today.toto} set={v=>upd("toto",v)}/><Fld label="Virtual (€)" val={today.virtual} set={v=>upd("virtual",v)}/></Row>
                 <Row><Fld label="LIS (€)" val={today.lis} set={v=>upd("lis",v)}/><Fld label="SISAL (€)" val={today.sisal} set={v=>upd("sisal",v)}/><Fld label="Valori Bollati (€)" val={today.valori} set={v=>upd("valori",v)}/></Row>
               </Block>
             </>}
@@ -476,7 +540,89 @@ export default function App() {
               ))}
             </>}
 
-            {/* ── RIEPILOGO ── */}
+
+            {/* ── PERSONALE ── */}
+            {tab==="personale"&&<>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div style={{fontSize:12,color:"#475569"}}>{MONTHS[month]} {year}</div>
+                <button onClick={addDipendente} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Dipendente</button>
+              </div>
+
+              {(personale.dipendenti||[]).length === 0 && (
+                <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>Nessun dipendente. Clicca "+ Dipendente" per iniziare.</div>
+              )}
+
+              {/* ANAGRAFICA DIPENDENTI */}
+              {(personale.dipendenti||[]).map((dip,i)=>{
+                const mens = calcMensile(i);
+                const tariffa = n(dip.stipendio) / (n(dip.ore_mensili)||1);
+                return (
+                  <Block key={i} title={dip.nome||`Dipendente #${i+1}`} accent="#60a5fa">
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                      <span style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1}}>DATI CONTRATTUALI</span>
+                      <button onClick={()=>delDipendente(i)} style={{background:"#0a1a2a",color:"#f87171",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                    </div>
+                    <Row>
+                      <Fld label="Nome" val={dip.nome} set={v=>updDipendente(i,"nome",v)} type="text" flex="2 1 140px"/>
+                      <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(i,"stipendio",v)}/>
+                      <Fld label="Ore mensili contratto" val={dip.ore_mensili} set={v=>updDipendente(i,"ore_mensili",v)}/>
+                    </Row>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>
+                      Tariffa oraria: <b style={{color:"#60a5fa"}}>{eur(tariffa)}/ora</b>
+                    </div>
+
+                    {/* RIEPILOGO MESE */}
+                    <div style={{background:"#080e1c",borderRadius:8,padding:12,marginBottom:12}}>
+                      <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:8}}>RIEPILOGO {MONTHS[month].toUpperCase()}</div>
+                      <RRow label="Ore lavorate" val={mens.ore.toFixed(1)+"h"} color="#4ade80"/>
+                      <RRow label="Paga ordinaria" val={eur(mens.paga)} color="#4ade80"/>
+                      <RRow label="Straordinari (manuale)" val={eur(mens.straordinari)} color="#fbbf24"/>
+                      <RRow label="− Anticipi" val={eur(-mens.anticipi)} color="#f87171"/>
+                      <RRow label="TOTALE DA PAGARE" val={eur(mens.totale)} color={mens.totale>=0?"#60a5fa":"#f87171"} bold/>
+                    </div>
+
+                    {/* PRESENZE GIORNALIERE */}
+                    <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:8}}>PRESENZE GIORNALIERE</div>
+                    {Array.from({length:new Date(year,month+1,0).getDate()},(_,gi)=>{
+                      const d = gi+1;
+                      const p = getPresenza(i,d);
+                      const ore = calcOre(p.entrata, p.uscita);
+                      return (
+                        <div key={d} style={{background:"#080e1c",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"#1e293b"}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                            <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{d} {MONTHS[month]}</span>
+                            <select value={p.tipo} onChange={e=>updPresenza(i,d,"tipo",e.target.value)}
+                              style={{background:"#0f1923",color:TIPO_COLOR[p.tipo]||"#e2e8f0",border:"1px solid #1e293b",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
+                              {Object.entries(TIPO_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                            </select>
+                          </div>
+                          {p.tipo==="lavoro"&&<>
+                            <Row mb={6}>
+                              <div style={{flex:1}}><Lbl c="Entrata"/><Inp val={p.entrata} set={v=>updPresenza(i,d,"entrata",v)} type="text" ph="08:00"/></div>
+                              <div style={{flex:1}}><Lbl c="Uscita"/><Inp val={p.uscita} set={v=>updPresenza(i,d,"uscita",v)} type="text" ph="16:00"/></div>
+                              <div style={{flex:1}}><Lbl c="Ore"/><div style={{background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:"#4ade80"}}>{ore.toFixed(1)}h</div></div>
+                            </Row>
+                            <Row mb={6}>
+                              <Fld label="Straordinari (€)" val={p.straordinari} set={v=>updPresenza(i,d,"straordinari",v)}/>
+                              <Fld label="Anticipo (€)" val={p.anticipo} set={v=>updPresenza(i,d,"anticipo",v)}/>
+                            </Row>
+                          </>}
+                          {p.tipo!=="lavoro"&&<>
+                            <Row mb={6}>
+                              <Fld label="Straordinari (€)" val={p.straordinari} set={v=>updPresenza(i,d,"straordinari",v)}/>
+                              <Fld label="Anticipo (€)" val={p.anticipo} set={v=>updPresenza(i,d,"anticipo",v)}/>
+                            </Row>
+                          </>}
+                          <div><Lbl c="Note"/><Inp val={p.nota} set={v=>updPresenza(i,d,"nota",v)} type="text" ph="Note..."/></div>
+                        </div>
+                      );
+                    })}
+                  </Block>
+                );
+              })}
+            </>}
+
+            {/* ── RIEPILOGO ── */
             {tab==="riepilogo"&&<>
               <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>GIORNO {day} — {MONTHS[month].toUpperCase()} {year}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
@@ -490,9 +636,10 @@ export default function App() {
                   ["Bar", n(today.bar), "#4ade80"],
                   ["Ristorante", n(today.risto), "#4ade80"],
                   ["Tabacchi rimasti", calc.tab_rim, "#fbbf24"],
+                  ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
                   ["Gratta rimasti", calc.gratta_rim, "#facc15"],
                   ["Lotto rimasti", calc.lotto_rim, "#f97316"],
-                  ["Toto", n(today.toto), "#34d399"],
+                  ["Scommesse", n(today.toto), "#34d399"],
                   ["Virtual", n(today.virtual), "#60a5fa"],
                   ["LIS", n(today.lis), "#c084fc"],
                   ["SISAL", n(today.sisal), "#c084fc"],
@@ -515,6 +662,7 @@ export default function App() {
                   ["Bar", n(today.bar), "#4ade80"],
                   ["Ristorante", n(today.risto), "#4ade80"],
                   ["POS Bar", n(today.pos_bar), "#a78bfa"],
+                  ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
                   ["− Spese contanti", -calc.spese_cont, "#f87171"],
                   ["− Spese elettronico", -calc.spese_ele, "#fb923c"],
                 ].filter(([,v])=>v!==0).map(([l,v,c])=><RRow key={l} label={l} val={eur(v,true)} color={c}/>)}
@@ -550,7 +698,7 @@ export default function App() {
               </button>
 
               <button onClick={()=>{
-                const headers = ["Giorno","Bar","Risto","POS Bar","Tab Venduto","Tab POS","Tab Rimasti","Gratta Venduto","Gratta Pagati","Gratta Rimasti","Lotto Venduto","Lotto Pagati","Lotto Rimasti","Toto","Virtual","LIS","SISAL","Valori","Dist. Prelievo","Slot Raccolto","Slot Monete","Slot Refill","PF Oggi","PF Domani","Monete Oggi","Monete Domani","Debiti Oggi","Debiti Domani","Arrotondamento","Spese Contanti","Spese Elettronico","Movimento","Guadagno"];
+                const headers = ["Giorno","Bar","Risto","POS Bar","Tab Venduto","Tab POS","Tab Rimasti","Gratta Venduto","Gratta Pagati","Gratta Rimasti","Lotto Venduto","Lotto Pagati","Lotto Rimasti","Scommesse","Virtual","LIS","SISAL","Valori","Dist. Prelievo","Slot Raccolto","Slot Monete","Slot Refill","PF Oggi","PF Domani","Monete Oggi","Monete Domani","Debiti Oggi","Debiti Domani","Arrotondamento","Spese Contanti","Spese Elettronico","Movimento","Guadagno"];
                 const rows = Array.from({length:dim(year,month)},(_,i)=>{
                   const d = all[dk(year,month,i+1)] || emptyDay();
                   const c = calcDay(d);
