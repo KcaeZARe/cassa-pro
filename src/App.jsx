@@ -20,7 +20,11 @@ const mk = (y, m) => `aggi_${y}_${m}`;
 const vk = (y, m) => `versamenti_${y}_${m}`;
 
 const pk = (y, m) => `personale_${y}_${m}`;
-const emptyDipendente = () => ({ nome:"", stipendio:"", ore_mensili:"", maggiorazione:"25" });
+const pgk = () => "pagamenti_globali";
+const emptyPagamento = () => ({ motivo:"", importo:"", data_scadenza:"", pagato:false, data_pagato:"" });
+
+const emptyDipendente = () => ({
+ nome:"", stipendio:"", ore_mensili:"", maggiorazione:"25", data_pagamento:"" });
 const emptyPresenza = () => ({ entrata:"", uscita:"", tipo:"lavoro", straordinari:"", anticipo:"", nota:"" });
 // tipo: lavoro | malattia | permesso | assenza | ferie
 
@@ -123,6 +127,7 @@ const TABS = [
   {id:"versamenti",label:"🏛️ Versamenti"},
   {id:"aggi",label:"📑 Aggi"},
   {id:"personale",label:"👥 Personale"},
+  {id:"pagamenti",label:"💳 Pagamenti"},
   {id:"riepilogo",label:"📊 Totali"},
 ];
 
@@ -221,6 +226,47 @@ export default function App() {
     return Math.max(0, mins/60);
   };
 
+  // ── PAGAMENTI ──
+  const PGKEY = pgk();
+  const pagamenti = all[PGKEY] || [];
+  const savePag = (updated) => save({...all, [PGKEY]: updated});
+  const addPagamento = () => savePag([...pagamenti, emptyPagamento()]);
+  const updPagamento = (i, f, v) => {
+    const pg = [...pagamenti];
+    pg[i] = {...pg[i], [f]: v};
+    savePag(pg);
+  };
+  const delPagamento = (i) => savePag(pagamenti.filter((_,j)=>j!==i));
+
+  // ── PROMEMORIA ──
+  const oggi = new Date();
+  oggi.setHours(0,0,0,0);
+  const diffGiorni = (dataStr) => {
+    if (!dataStr) return null;
+    const [d,m,y] = dataStr.split("/").map(Number);
+    if (!d||!m||!y) return null;
+    const data = new Date(y,m-1,d);
+    data.setHours(0,0,0,0);
+    return Math.ceil((data-oggi)/(1000*60*60*24));
+  };
+  const promemoria = [];
+  // Stipendi dipendenti
+  (personale.dipendenti||[]).forEach(dip => {
+    if (!dip.data_pagamento || !dip.nome) return;
+    const diff = diffGiorni(dip.data_pagamento);
+    if (diff !== null && diff <= 7) {
+      promemoria.push({ tipo: diff < 0 ? "scaduto" : diff === 0 ? "oggi" : "presto", testo: `Stipendio ${dip.nome}`, data: dip.data_pagamento, diff });
+    }
+  });
+  // Pagamenti
+  pagamenti.filter(p=>!p.pagato).forEach(pag => {
+    if (!pag.data_scadenza || !pag.motivo) return;
+    const diff = diffGiorni(pag.data_scadenza);
+    if (diff !== null && diff <= 7) {
+      promemoria.push({ tipo: diff < 0 ? "scaduto" : diff === 0 ? "oggi" : "presto", testo: pag.motivo, importo: pag.importo, data: pag.data_scadenza, diff });
+    }
+  });
+
   const calcMensile = (dipIdx) => {
     const dip = (personale.dipendenti||[])[dipIdx];
     if (!dip) return { ore:0, paga:0, straordinari:0, anticipi:0, totale:0 };
@@ -301,6 +347,24 @@ export default function App() {
           ))}
         </div>
       </div>
+
+      {/* ── PROMEMORIA BANNER ── */}
+      {promemoria.length > 0 && (
+        <div style={{background:"#1a0a00",borderBottom:"1px solid #7c2d12",padding:"10px 16px"}}>
+          <div style={{fontSize:10,color:"#f97316",fontWeight:800,letterSpacing:1,marginBottom:6}}>⚠️ PROMEMORIA SCADENZE</div>
+          {promemoria.map((p,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #431407",fontSize:12}}>
+              <span style={{color: p.tipo==="scaduto"?"#f87171": p.tipo==="oggi"?"#fbbf24":"#fb923c"}}>
+                {p.tipo==="scaduto"?"🔴":p.tipo==="oggi"?"🟡":"🟠"} {p.testo}
+                {p.importo ? ` — ${p.importo}€` : ""}
+              </span>
+              <span style={{color:"#64748b",fontSize:11}}>
+                {p.tipo==="scaduto" ? `Scaduto ${Math.abs(p.diff)}gg fa` : p.tipo==="oggi" ? "Oggi!" : `Tra ${p.diff}gg`}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── VISTA MESE ── */}
       {view==="month"&&(
@@ -567,6 +631,12 @@ export default function App() {
                       <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(i,"stipendio",v)}/>
                       <Fld label="Ore mensili contratto" val={dip.ore_mensili} set={v=>updDipendente(i,"ore_mensili",v)}/>
                     </Row>
+                    <Row>
+                      <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(i,"data_pagamento",v)} type="text" flex="2 1 180px"/>
+                      <div style={{flex:"1 1 140px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
+                        <span style={{fontSize:11,color:"#475569"}}>Il banner appare 7 giorni prima</span>
+                      </div>
+                    </Row>
                     <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>
                       Tariffa oraria: <b style={{color:"#60a5fa"}}>{eur(tariffa)}/ora</b>
                     </div>
@@ -618,6 +688,59 @@ export default function App() {
                       );
                     })}
                   </Block>
+                );
+              })}
+            </>}
+
+            {/* ── PAGAMENTI ── */}
+            {tab==="pagamenti"&&<>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div style={{fontSize:12,color:"#94a3b8"}}>Scadenze e pagamenti pianificati</div>
+                <button onClick={addPagamento} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi</button>
+              </div>
+
+              {pagamenti.length===0&&(
+                <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>Nessun pagamento. Clicca "+ Aggiungi" per iniziare.</div>
+              )}
+
+              {pagamenti.map((pag,i)=>{
+                const diff = diffGiorni(pag.data_scadenza);
+                const scaduto = diff !== null && diff < 0 && !pag.pagato;
+                const inScadenza = diff !== null && diff >= 0 && diff <= 7 && !pag.pagato;
+                const borderColor = pag.pagato ? "#166534" : scaduto ? "#f87171" : inScadenza ? "#f97316" : "#334155";
+                return (
+                  <div key={i} style={{background:"#0f1923",borderRadius:12,borderLeft:`4px solid ${borderColor}`,padding:14,marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                      <span style={{fontSize:10,fontWeight:800,letterSpacing:1,color:borderColor}}>
+                        {pag.pagato ? "✅ PAGATO" : scaduto ? "🔴 SCADUTO" : inScadenza ? "🟠 IN SCADENZA" : "⏳ PIANIFICATO"}
+                      </span>
+                      <button onClick={()=>delPagamento(i)} style={{background:"#1a0a0a",color:"#f87171",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                    </div>
+                    <Row>
+                      <div style={{flex:"2 1 160px"}}><Lbl c="Motivo / Descrizione"/><Inp val={pag.motivo} set={v=>updPagamento(i,"motivo",v)} type="text" ph="es. Affitto, Fornitore X..."/></div>
+                      <Fld label="Importo (€)" val={pag.importo} set={v=>updPagamento(i,"importo",v)}/>
+                    </Row>
+                    <Row>
+                      <Fld label="Data scadenza (gg/mm/aaaa)" val={pag.data_scadenza} set={v=>updPagamento(i,"data_scadenza",v)} type="text" flex="2 1 160px"/>
+                      {diff !== null && !pag.pagato && (
+                        <div style={{flex:"1 1 100px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
+                          <span style={{fontSize:12,fontWeight:700,color:scaduto?"#f87171":inScadenza?"#f97316":"#64748b"}}>
+                            {scaduto ? `Scaduto ${Math.abs(diff)}gg fa` : diff===0 ? "Oggi!" : `Tra ${diff} giorni`}
+                          </span>
+                        </div>
+                      )}
+                    </Row>
+                    <div style={{display:"flex",alignItems:"center",gap:12,marginTop:4}}>
+                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#94a3b8"}}>
+                        <input type="checkbox" checked={pag.pagato||false} onChange={e=>updPagamento(i,"pagato",e.target.checked)}
+                          style={{width:16,height:16,cursor:"pointer"}}/>
+                        Segna come pagato
+                      </label>
+                      {pag.pagato && (
+                        <Fld label="Data pagato" val={pag.data_pagato||""} set={v=>updPagamento(i,"data_pagato",v)} type="text" flex="1 1 140px"/>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </>}
