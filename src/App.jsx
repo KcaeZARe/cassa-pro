@@ -622,7 +622,7 @@ export default function App() {
               })}
             </>}
 
-            {/* ── RIEPILOGO ── */
+            {/* ── RIEPILOGO ── */}
             {tab==="riepilogo"&&<>
               <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>GIORNO {day} — {MONTHS[month].toUpperCase()} {year}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
