@@ -1,4 +1,48 @@
 import { useState, useEffect } from "react";
+
+// ── GOOGLE DRIVE SYNC ──────────────────────────────────────
+const GDRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "";
+const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const GDRIVE_FILE_NAME = "cassa-pro-backup.json";
+
+const gdriveAuth = () => new Promise((resolve, reject) => {
+  const client = window.google?.accounts?.oauth2?.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPE,
+    callback: (resp) => resp.error ? reject(resp) : resolve(resp.access_token),
+  });
+  if (!client) { reject("Google API non caricata"); return; }
+  client.requestAccessToken();
+});
+
+const gdriveFindFile = async (token) => {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=name='${GDRIVE_FILE_NAME}'&spaces=drive`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json();
+  return data.files?.[0]?.id || null;
+};
+
+const gdriveSave = async (token, dataStr, fileId) => {
+  const meta = JSON.stringify({ name: GDRIVE_FILE_NAME, mimeType: "application/json" });
+  const body = new FormData();
+  body.append("metadata", new Blob([meta], { type: "application/json" }));
+  body.append("file", new Blob([dataStr], { type: "application/json" }));
+  const url = fileId
+    ? `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`
+    : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+  const method = fileId ? "PATCH" : "POST";
+  const res = await fetch(url, { method, headers: { Authorization: `Bearer ${token}` }, body });
+  return res.json();
+};
+
+const gdriveLoad = async (token, fileId) => {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  return res.json();
+};
+
 const STORAGE_KEY = "cassapro_v4";
 const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
 const persist = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
@@ -146,6 +190,46 @@ export default function App() {
   const [tab, setTab] = useState("incassi");
   const [view, setView] = useState("day");
   const [flash, setFlash] = useState(false);
+  const [selDip, setSelDip] = useState(null);
+  const [driveStatus, setDriveStatus] = useState(""); // "", "syncing", "ok", "error"
+
+  const handleDriveSave = async () => {
+    setDriveStatus("syncing");
+    try {
+      const token = await gdriveAuth();
+      const dataStr = JSON.stringify(all, null, 2);
+      const fileId = await gdriveFindFile(token);
+      await gdriveSave(token, dataStr, fileId);
+      localStorage.setItem("cassapro_last_backup", new Date().toISOString());
+      localStorage.setItem("cassapro_drive_fileid", fileId||"new");
+      setDriveStatus("ok");
+      setTimeout(() => setDriveStatus(""), 3000);
+    } catch(e) {
+      console.error(e);
+      setDriveStatus("error");
+      setTimeout(() => setDriveStatus(""), 4000);
+    }
+  };
+
+  const handleDriveLoad = async () => {
+    if (!window.confirm("Vuoi caricare i dati da Google Drive? I dati locali verranno sostituiti.")) return;
+    setDriveStatus("syncing");
+    try {
+      const token = await gdriveAuth();
+      const fileId = await gdriveFindFile(token);
+      if (!fileId) { alert("Nessun backup trovato su Drive."); setDriveStatus(""); return; }
+      const imported = await gdriveLoad(token, fileId);
+      setAll(imported);
+      persist(imported);
+      localStorage.setItem("cassapro_last_backup", new Date().toISOString());
+      setDriveStatus("ok");
+      setTimeout(() => setDriveStatus(""), 3000);
+    } catch(e) {
+      console.error(e);
+      setDriveStatus("error");
+      setTimeout(() => setDriveStatus(""), 4000);
+    }
+  };
 
   const KEY = dk(year,month,day);
   const NKEY = nextDk(year,month,day);
@@ -258,6 +342,17 @@ export default function App() {
       promemoria.push({ tipo: diff < 0 ? "scaduto" : diff === 0 ? "oggi" : "presto", testo: `Stipendio ${dip.nome}`, data: dip.data_pagamento, diff });
     }
   });
+  // Promemoria backup
+  const lastBackup = localStorage.getItem("cassapro_last_backup");
+  if (!lastBackup) {
+    promemoria.push({ tipo:"backup", testo:"Nessun backup ancora — fai il primo backup!", diff:999 });
+  } else {
+    const daysSince = Math.floor((oggi - new Date(lastBackup)) / (1000*60*60*24));
+    if (daysSince >= 7) {
+      promemoria.push({ tipo:"backup", testo:`Backup dati — ultimo ${daysSince} giorni fa`, diff:0 });
+    }
+  }
+
   // Pagamenti
   pagamenti.filter(p=>!p.pagato).forEach(pag => {
     if (!pag.data_scadenza || !pag.motivo) return;
@@ -606,93 +701,126 @@ export default function App() {
 
 
             {/* ── PERSONALE ── */}
+                        {/* ── PERSONALE ── */}
             {tab==="personale"&&<>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <div style={{fontSize:12,color:"#475569"}}>{MONTHS[month]} {year}</div>
-                <button onClick={addDipendente} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Dipendente</button>
-              </div>
 
-              {(personale.dipendenti||[]).length === 0 && (
-                <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>Nessun dipendente. Clicca "+ Dipendente" per iniziare.</div>
-              )}
+              {/* LISTA DIPENDENTI */}
+              {selDip===null&&<>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                  <div style={{fontSize:12,color:"#475569"}}>{MONTHS[month]} {year}</div>
+                  <button onClick={addDipendente} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Dipendente</button>
+                </div>
 
-              {/* ANAGRAFICA DIPENDENTI */}
-              {(personale.dipendenti||[]).map((dip,i)=>{
-                const mens = calcMensile(i);
-                const tariffa = n(dip.stipendio) / (n(dip.ore_mensili)||1);
-                return (
-                  <Block key={i} title={dip.nome||`Dipendente #${i+1}`} accent="#60a5fa">
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-                      <span style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1}}>DATI CONTRATTUALI</span>
-                      <button onClick={()=>delDipendente(i)} style={{background:"#0a1a2a",color:"#f87171",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                {(personale.dipendenti||[]).length===0&&(
+                  <div style={{textAlign:"center",color:"#475569",padding:60,fontSize:13}}>Nessun dipendente.<br/>Clicca "+ Dipendente" per iniziare.</div>
+                )}
+
+                {(personale.dipendenti||[]).map((dip,i)=>{
+                  const mens = calcMensile(i);
+                  const hasProm = promemoria.some(p=>p.testo===`Stipendio ${dip.nome}`);
+                  return (
+                    <div key={i} onClick={()=>setSelDip(i)}
+                      style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:14,marginBottom:10,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:800,color:"#e2e8f0",marginBottom:4}}>
+                          {hasProm&&<span style={{color:"#f97316",marginRight:6}}>⚠️</span>}
+                          {dip.nome||`Dipendente #${i+1}`}
+                        </div>
+                        <div style={{fontSize:11,color:"#64748b"}}>
+                          Stipendio: {dip.stipendio?`€${dip.stipendio}`:"—"} · Ore: {dip.ore_mensili||"—"}h/mese
+                        </div>
+                        <div style={{fontSize:11,color:"#64748b",marginTop:2}}>
+                          Ore lavorate: <b style={{color:"#4ade80"}}>{mens.ore.toFixed(1)}h</b> · Da pagare: <b style={{color:"#60a5fa"}}>{eur(mens.totale)}</b>
+                        </div>
+                        {dip.data_pagamento&&<div style={{fontSize:11,color:"#f97316",marginTop:2}}>Pagamento: {dip.data_pagamento}</div>}
+                      </div>
+                      <div style={{fontSize:20,color:"#334155"}}>›</div>
                     </div>
+                  );
+                })}
+              </>}
+
+              {/* DETTAGLIO DIPENDENTE */}
+              {selDip!==null&&(()=>{
+                const dip = (personale.dipendenti||[])[selDip];
+                if (!dip) { setSelDip(null); return null; }
+                const mens = calcMensile(selDip);
+                const tariffa = n(dip.stipendio)/(n(dip.ore_mensili)||1);
+                return (<>
+                  {/* Header con freccia back */}
+                  <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+                    <button onClick={()=>setSelDip(null)} style={{background:"#1e293b",color:"#e2e8f0",border:"none",borderRadius:8,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>← Torna</button>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{dip.nome||`Dipendente #${selDip+1}`}</div>
+                      <div style={{fontSize:10,color:"#64748b"}}>Tariffa: {eur(tariffa)}/ora</div>
+                    </div>
+                    <button onClick={()=>delDipendente(selDip)&&setSelDip(null)} style={{marginLeft:"auto",background:"#1a0a0a",color:"#f87171",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕ Rimuovi</button>
+                  </div>
+
+                  {/* DATI CONTRATTUALI */}
+                  <Block title="Dati Contrattuali" accent="#60a5fa">
                     <Row>
-                      <Fld label="Nome" val={dip.nome} set={v=>updDipendente(i,"nome",v)} type="text" flex="2 1 140px"/>
-                      <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(i,"stipendio",v)}/>
-                      <Fld label="Ore mensili contratto" val={dip.ore_mensili} set={v=>updDipendente(i,"ore_mensili",v)}/>
+                      <Fld label="Nome" val={dip.nome} set={v=>updDipendente(selDip,"nome",v)} type="text" flex="2 1 140px"/>
+                      <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(selDip,"stipendio",v)}/>
+                      <Fld label="Ore mensili" val={dip.ore_mensili} set={v=>updDipendente(selDip,"ore_mensili",v)}/>
                     </Row>
                     <Row>
-                      <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(i,"data_pagamento",v)} type="text" flex="2 1 180px"/>
-                      <div style={{flex:"1 1 140px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
-                        <span style={{fontSize:11,color:"#475569"}}>Il banner appare 7 giorni prima</span>
+                      <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(selDip,"data_pagamento",v)} type="text" flex="2 1 180px"/>
+                      <div style={{flex:"1 1 120px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
+                        <span style={{fontSize:11,color:"#475569"}}>Banner 7 giorni prima</span>
                       </div>
                     </Row>
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:12}}>
-                      Tariffa oraria: <b style={{color:"#60a5fa"}}>{eur(tariffa)}/ora</b>
-                    </div>
+                  </Block>
 
-                    {/* RIEPILOGO MESE */}
-                    <div style={{background:"#080e1c",borderRadius:8,padding:12,marginBottom:12}}>
-                      <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:8}}>RIEPILOGO {MONTHS[month].toUpperCase()}</div>
-                      <RRow label="Ore lavorate" val={mens.ore.toFixed(1)+"h"} color="#4ade80"/>
-                      <RRow label="Paga ordinaria" val={eur(mens.paga)} color="#4ade80"/>
-                      <RRow label="Straordinari (manuale)" val={eur(mens.straordinari)} color="#fbbf24"/>
-                      <RRow label="− Anticipi" val={eur(-mens.anticipi)} color="#f87171"/>
-                      <RRow label="TOTALE DA PAGARE" val={eur(mens.totale)} color={mens.totale>=0?"#60a5fa":"#f87171"} bold/>
-                    </div>
+                  {/* RIEPILOGO MESE */}
+                  <Block title={"Riepilogo "+MONTHS[month]+" "+year} accent="#4ade80">
+                    <RRow label="Ore lavorate" val={mens.ore.toFixed(1)+"h"} color="#4ade80"/>
+                    <RRow label="Paga ordinaria" val={eur(mens.paga)} color="#4ade80"/>
+                    <RRow label="Straordinari" val={eur(mens.straordinari)} color="#fbbf24"/>
+                    <RRow label="− Anticipi" val={eur(-mens.anticipi)} color="#f87171"/>
+                    <div style={{height:4}}/>
+                    <RRow label="TOTALE DA PAGARE" val={eur(mens.totale)} color="#60a5fa" bold/>
+                  </Block>
 
-                    {/* PRESENZE GIORNALIERE */}
-                    <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:8}}>PRESENZE GIORNALIERE</div>
-                    {Array.from({length:new Date(year,month+1,0).getDate()},(_,gi)=>{
+                  {/* PRESENZE */}
+                  <Block title="Presenze Giornaliere" accent="#a78bfa">
+                    {Array.from({length:dim(year,month)},(_,gi)=>{
                       const d = gi+1;
-                      const p = getPresenza(i,d);
+                      const p = getPresenza(selDip,d);
                       const ore = calcOre(p.entrata, p.uscita);
+                      const wd = new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
                       return (
                         <div key={d} style={{background:"#080e1c",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"#1e293b"}`}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{d} {MONTHS[month]}</span>
-                            <select value={p.tipo} onChange={e=>updPresenza(i,d,"tipo",e.target.value)}
-                              style={{background:"#0f1923",color:TIPO_COLOR[p.tipo]||"#e2e8f0",border:"1px solid #1e293b",padding:"4px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
-                              {Object.entries(TIPO_LABEL).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                            <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{wd} {d}</span>
+                            <select value={p.tipo} onChange={e=>updPresenza(selDip,d,"tipo",e.target.value)}
+                              style={{background:"#0f1923",color:TIPO_COLOR[p.tipo],border:"1px solid #1e293b",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
+                              {["lavoro","malattia","permesso","assenza","ferie"].map(t=><option key={t} value={t}>{TIPO_IT[t]}</option>)}
                             </select>
                           </div>
-                          {p.tipo==="lavoro"&&<>
-                            <Row mb={6}>
-                              <div style={{flex:1}}><Lbl c="Entrata"/><Inp val={p.entrata} set={v=>updPresenza(i,d,"entrata",v)} type="text" ph="08:00"/></div>
-                              <div style={{flex:1}}><Lbl c="Uscita"/><Inp val={p.uscita} set={v=>updPresenza(i,d,"uscita",v)} type="text" ph="16:00"/></div>
-                              <div style={{flex:1}}><Lbl c="Ore"/><div style={{background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:"#4ade80"}}>{ore.toFixed(1)}h</div></div>
+                          {p.tipo==="lavoro"&&(
+                            <Row>
+                              <div style={{flex:1}}><Lbl c="Entrata"/><Inp val={p.entrata} set={v=>updPresenza(selDip,d,"entrata",v)} type="text" ph="08:00"/></div>
+                              <div style={{flex:1}}><Lbl c="Uscita"/><Inp val={p.uscita} set={v=>updPresenza(selDip,d,"uscita",v)} type="text" ph="16:00"/></div>
+                              <div style={{flex:1}}>
+                                <Lbl c="Ore"/>
+                                <div style={{background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:"#4ade80"}}>{ore.toFixed(1)}h</div>
+                              </div>
                             </Row>
-                            <Row mb={6}>
-                              <Fld label="Straordinari (€)" val={p.straordinari} set={v=>updPresenza(i,d,"straordinari",v)}/>
-                              <Fld label="Anticipo (€)" val={p.anticipo} set={v=>updPresenza(i,d,"anticipo",v)}/>
-                            </Row>
-                          </>}
-                          {p.tipo!=="lavoro"&&<>
-                            <Row mb={6}>
-                              <Fld label="Straordinari (€)" val={p.straordinari} set={v=>updPresenza(i,d,"straordinari",v)}/>
-                              <Fld label="Anticipo (€)" val={p.anticipo} set={v=>updPresenza(i,d,"anticipo",v)}/>
-                            </Row>
-                          </>}
-                          <div><Lbl c="Note"/><Inp val={p.nota} set={v=>updPresenza(i,d,"nota",v)} type="text" ph="Note..."/></div>
+                          )}
+                          <Row>
+                            <Fld label="Straordinari (€)" val={p.straordinari} set={v=>updPresenza(selDip,d,"straordinari",v)}/>
+                            <Fld label="Anticipo (€)" val={p.anticipo} set={v=>updPresenza(selDip,d,"anticipo",v)}/>
+                          </Row>
+                          <div><Lbl c="Note"/><Inp val={p.nota} set={v=>updPresenza(selDip,d,"nota",v)} type="text" ph="Note..."/></div>
                         </div>
                       );
                     })}
                   </Block>
-                );
-              })}
+                </>);
+              })()}
             </>}
 
-            {/* ── PAGAMENTI ── */}
             {tab==="pagamenti"&&<>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <div style={{fontSize:12,color:"#94a3b8"}}>Scadenze e pagamenti pianificati</div>
@@ -816,6 +944,7 @@ export default function App() {
                 a.href = URL.createObjectURL(blob);
                 a.download = `cassa-pro-backup-${year}.json`;
                 a.click();
+                localStorage.setItem("cassapro_last_backup", new Date().toISOString());
               }} style={{width:"100%",background:"#0f1923",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
                 💾 Backup completo (JSON)
               </button>
@@ -839,6 +968,22 @@ export default function App() {
               }} style={{width:"100%",background:"#0f1923",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
                 📊 Esporta Excel/CSV ({MONTHS[month]} {year})
               </button>
+
+              {/* GOOGLE DRIVE SYNC */}
+              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e3a5f"}}>
+                <div style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:10}}>☁️ SYNC GOOGLE DRIVE</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={handleDriveSave} disabled={driveStatus==="syncing"}
+                    style={{flex:1,background:"#0a1a2a",color:"#4ade80",border:"1px solid #166534",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    {driveStatus==="syncing"?"⏳ Salvataggio...":driveStatus==="ok"?"✅ Salvato!":driveStatus==="error"?"❌ Errore":"☁️ Salva su Drive"}
+                  </button>
+                  <button onClick={handleDriveLoad} disabled={driveStatus==="syncing"}
+                    style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    {driveStatus==="syncing"?"⏳ Caricamento...":"📥 Carica da Drive"}
+                  </button>
+                </div>
+                <div style={{fontSize:10,color:"#475569",marginTop:8}}>La prima volta ti chiederà di autorizzare con Google</div>
+              </div>
 
               <label style={{display:"block",width:"100%",background:"#0f1923",color:"#a78bfa",border:"1px solid #3b0764",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8,textAlign:"center",boxSizing:"border-box"}}>
                 📂 Ripristina da backup (JSON)
