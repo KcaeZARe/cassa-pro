@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 
 // ── PIN SYSTEM v2 — ADMIN + DIPENDENTE ─────────────────────
 const ADMIN_PIN_KEY    = "cassapro_pin_admin_hash";
-const DIP_PIN_KEY      = "cassapro_pin_dip_hash";
+const DIP_PIN_KEY      = "cassapro_pin_dip_hash"; // legacy, non più usato
+const DIP_PIN_PREFIX   = "cassapro_dip_pin_"; // cassapro_dip_pin_0, _1, ecc.
 const RECOVERY_KEY     = "cassapro_recovery_hash";
 const SESSION_KEY      = "cassapro_session_v2";
 const ATTEMPTS_KEY     = "cassapro_attempts_v2";
@@ -30,36 +31,45 @@ const genRecoveryCode = () => {
 
 // storage helpers
 const getAdminHash    = () => localStorage.getItem(ADMIN_PIN_KEY);
-const getDipHash      = () => localStorage.getItem(DIP_PIN_KEY);
 const getRecoveryHash = () => localStorage.getItem(RECOVERY_KEY);
 const hasAdminPIN     = () => !!getAdminHash();
-const hasDipPIN       = () => !!getDipHash();
+
+// PIN per singolo dipendente (per indice)
+const getDipIdxPINKey  = (idx) => `${DIP_PIN_PREFIX}${idx}`;
+const setDipIdxPIN     = async (idx, pin) => localStorage.setItem(getDipIdxPINKey(idx), await hashPIN(pin));
+const removeDipIdxPIN  = (idx) => localStorage.removeItem(getDipIdxPINKey(idx));
+const getDipIdxHash    = (idx) => localStorage.getItem(getDipIdxPINKey(idx));
+const hasDipIdxPIN     = (idx) => !!getDipIdxHash(idx);
+const anyDipPIN        = (count) => Array.from({length:count},(_,i)=>i).some(i=>hasDipIdxPIN(i));
+// Trova quale dipendente corrisponde al PIN — ritorna indice o -1
+const matchDipPIN = async (pin, count) => {
+  const hash = await hashPIN(pin);
+  for (let i = 0; i < count; i++) {
+    if (getDipIdxHash(i) === hash) return i;
+  }
+  return -1;
+};
 
 const setAdminPIN = async (pin, recoveryCode) => {
   localStorage.setItem(ADMIN_PIN_KEY, await hashPIN(pin));
   localStorage.setItem(RECOVERY_KEY,  await hashRecovery(recoveryCode));
 };
-const setDipPIN = async (pin) => {
-  localStorage.setItem(DIP_PIN_KEY, await hashPIN(pin));
-};
 const removeAdminPIN = () => {
   localStorage.removeItem(ADMIN_PIN_KEY);
   localStorage.removeItem(RECOVERY_KEY);
-  localStorage.removeItem(DIP_PIN_KEY); // rimuove anche dip se esiste
 };
-const removeDipPIN = () => localStorage.removeItem(DIP_PIN_KEY);
 
-// sessione: role = "admin" | "dipendente" | null
+// sessione: role = "admin" | "dipendente" | null, dipIdx per dipendente
 const getSession = () => {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
     if (!s) return null;
     const maxAge = s.role === "admin" ? 8*60*60*1000 : 12*60*60*1000;
     if (Date.now() - s.ts > maxAge) { sessionStorage.removeItem(SESSION_KEY); return null; }
-    return s.role;
+    return s;
   } catch { return null; }
 };
-const setSession = (role) => sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role, ts: Date.now() }));
+const setSession = (role, dipIdx=null) => sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role, dipIdx, ts: Date.now() }));
 const clearSession = () => sessionStorage.removeItem(SESSION_KEY);
 
 // tentativi per ruolo
@@ -71,13 +81,13 @@ const setAttempts = (role, obj) => localStorage.setItem(ATTEMPTS_KEY+"_"+role, J
 const resetAttempts = (role) => localStorage.removeItem(ATTEMPTS_KEY+"_"+role);
 
 // ── Componente schermata PIN ────────────────────────────────
-function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole }) {
+function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, dipIdx }) {
   /*
     mode:  "choose_role" | "unlock" | "setup_admin" | "change_admin"
            "setup_dip" | "change_dip" | "recovery"
     role:  "admin" | "dipendente"
   */
-  const LEN = (mode === "setup_dip" || mode === "change_dip" || (mode === "unlock" && role === "dipendente")) ? 4 : 6;
+  const LEN = (mode === "setup_dip_idx" || mode === "change_dip_idx" || mode === "setup_dip" || mode === "change_dip" || (mode === "unlock" && role === "dipendente")) ? 4 : 6;
   const emptyDigits = () => Array(LEN).fill("");
 
   const [digits,  setDigits]  = useState(emptyDigits);
@@ -135,7 +145,26 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole }) {
 
     // ── UNLOCK ──
     if (mode === "unlock") {
-      const expected = r === "admin" ? getAdminHash() : getDipHash();
+      if (r === "dipendente" && onMatchDip) {
+        const idx = await onMatchDip(pin);
+        if (idx >= 0) {
+          resetAttempts(r); onSuccess(r, pin);
+        } else {
+          const a = getAttempts(r);
+          const newCount = (a.count||0) + 1;
+          setAttempts(r, { count: newCount, ts: Date.now() });
+          if (newCount >= MAX_ATTEMPTS) {
+            setLockout(Math.ceil(LOCKOUT_MS/1000));
+            setError("Troppi tentativi — bloccato 60s");
+          } else {
+            setError(`PIN errato. Tentativi rimasti: ${MAX_ATTEMPTS - newCount}`);
+          }
+          setDigits(emptyDigits());
+          setTimeout(() => refs.current[0]?.focus(), 50);
+        }
+        return;
+      }
+      const expected = getAdminHash();
       const hash = await hashPIN(pin);
       if (hash === expected) {
         resetAttempts(r); setSession(r); onSuccess(r);
@@ -753,18 +782,26 @@ const TABS = [
 ];
 
 // ── VISTA DIPENDENTE ───────────────────────────────────────
-function DipendentView({ all, year, month, day, setYear, setMonth, setDay, personale, onSave, onLock, MONTHS, dim, dk }) {
-  const [selDip, setSelDip] = useState(null);
+// dipIdx = indice del dipendente già autenticato (non può cambiare)
+function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
+  personale, onSave, onLock, MONTHS, dim, dk, dipIdx }) {
+
   const [flash, setFlash] = useState(false);
   const days = dim(year, month);
 
-  const save = (updated) => { onSave(updated); setFlash(true); setTimeout(()=>setFlash(false),1200); };
+  const now = new Date();
+  const todayY = now.getFullYear();
+  const todayM = now.getMonth();
+  const todayD = now.getDate();
+  const isToday = year===todayY && month===todayM && day===todayD;
+  const isPast  = new Date(year,month,day) < new Date(todayY,todayM,todayD);
 
-  const presKey = (dipIdx, d) => `${dipIdx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
-  const getP = (dipIdx, d) => (personale.presenze||{})[presKey(dipIdx,d)] || { entrata:"", uscita:"", tipo:"lavoro", straordinari:"", anticipo:"", nota:"" };
-  const updP = (dipIdx, d, f, v) => {
-    const k = presKey(dipIdx,d);
-    const presenze = {...(personale.presenze||{}), [k]: {...getP(dipIdx,d), [f]: v}};
+  const save = (updated) => { onSave(updated); setFlash(true); setTimeout(()=>setFlash(false),1200); };
+  const presKey = (idx, d) => `${idx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+  const getP = (idx, d) => (personale.presenze||{})[presKey(idx,d)] || { entrata:"", uscita:"", tipo:"lavoro", nota:"" };
+  const updP = (idx, d, f, v) => {
+    const k = presKey(idx,d);
+    const presenze = {...(personale.presenze||{}), [k]: {...getP(idx,d), [f]: v}};
     save({...personale, presenze});
   };
   const calcOre = (e,u) => {
@@ -774,28 +811,42 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay, perso
     return Math.max(0,((uh*60+um)-(eh*60+em))/60);
   };
 
+  const dip = (personale.dipendenti||[])[dipIdx];
+  if (!dip) return (
+    <div style={{minHeight:"100vh",background:"#05090f",display:"flex",alignItems:"center",
+      justifyContent:"center",color:"#f87171",fontFamily:"'DM Mono','Courier New',monospace",fontSize:13}}>
+      Dipendente non trovato. <button onClick={onLock} style={{marginLeft:12,background:"none",color:"#60a5fa",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Esci</button>
+    </div>
+  );
+
+  const p   = getP(dipIdx, day);
+  const ore = calcOre(p.entrata, p.uscita);
+  const locked = isPast; // giorni passati: sola lettura
+
   return (
-    <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
+    <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",
+      fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
+
       {/* HEADER */}
       <div style={{background:"linear-gradient(180deg,#0a1520 0%,#05090f 100%)",padding:"18px 16px 12px",
         position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e3a5f"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
             <div style={{fontSize:15,fontWeight:800,letterSpacing:2,color:"#60a5fa"}}>◈ CASSA PRO</div>
-            <div style={{fontSize:10,color:"#1e3a5f",letterSpacing:1}}>AREA DIPENDENTE</div>
+            <div style={{fontSize:11,color:"#60a5fa88"}}>{dip.nome}</div>
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"#0a1a2a",color:"#60a5fa",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
-            <button onClick={onLock} style={{background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",
-              padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+            <button onClick={onLock} style={{background:"#0a1020",color:"#60a5fa",
+              border:"1px solid #1e3a5f",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               🔒 Esci
             </button>
           </div>
         </div>
-        {/* Selettori mese/giorno */}
+        {/* Selettori — solo giorno corrente e mese (per vedere storico) */}
         <div style={{display:"flex",gap:8,marginTop:10}}>
           {[
-            {val:year,set:setYear,opts:[2024,2025,2026].map(y=>({v:y,l:y}))},
+            {val:year,set:setYear,opts:Array.from({length:new Date().getFullYear()-2023+3},(_,i)=>({v:2023+i,l:2023+i}))},
             {val:month,set:setMonth,opts:MONTHS.map((m,i)=>({v:i,l:m}))},
             {val:day,set:setDay,opts:Array.from({length:days},(_,i)=>({v:i+1,l:i+1}))},
           ].map((s,i)=>(
@@ -809,105 +860,104 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay, perso
       </div>
 
       <div style={{padding:16}}>
-        {/* Seleziona dipendente */}
-        {selDip===null&&<>
-          <div style={{fontSize:12,color:"#475569",marginBottom:14}}>Seleziona il tuo nome:</div>
-          {(personale.dipendenti||[]).length===0&&(
-            <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>
-              Nessun dipendente registrato.<br/>Chiedi al titolare di aggiungere i dipendenti.
+
+        {/* Banner giorno bloccato */}
+        {locked&&(
+          <div style={{background:"#1a0a00",border:"1px solid #713f12",borderRadius:10,
+            padding:"10px 14px",marginBottom:14,fontSize:12,color:"#f97316",fontWeight:700}}>
+            🔒 Giorno passato — sola lettura. Solo il giorno corrente è modificabile.
+          </div>
+        )}
+
+        {/* Card inserimento presenze */}
+        <div style={{background:"#0f1923",borderRadius:14,borderLeft:`4px solid ${locked?"#334155":"#60a5fa"}`,
+          padding:16,marginBottom:14,opacity:locked?0.8:1}}>
+          <div style={{fontSize:11,color:locked?"#475569":"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:12}}>
+            {String(day).padStart(2,"0")}/{String(month+1).padStart(2,"0")}/{year}
+            {isToday&&<span style={{marginLeft:8,background:"#0a1a2a",color:"#4ade80",padding:"2px 8px",borderRadius:10,fontSize:10}}>OGGI</span>}
+          </div>
+
+          {/* Tipo giornata */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
+            <select value={p.tipo||"lavoro"} disabled={locked}
+              onChange={e=>updP(dipIdx,day,"tipo",e.target.value)}
+              style={{width:"100%",background:"#080e1c",color:locked?"#475569":TIPO_COLOR[p.tipo||"lavoro"],
+                border:"1px solid #1e293b",padding:"10px 12px",borderRadius:8,
+                fontSize:13,fontFamily:"inherit",fontWeight:700,
+                cursor:locked?"not-allowed":"pointer"}}>
+              {Object.entries(TIPO_IT).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+
+          {/* Entrata / Uscita / Ore */}
+          {(p.tipo==="lavoro"||!p.tipo)&&(
+            <div style={{display:"flex",gap:10,marginBottom:12}}>
+              {[
+                {label:"ENTRATA",field:"entrata",ph:"08:00"},
+                {label:"USCITA", field:"uscita", ph:"16:00"},
+              ].map(({label,field,ph})=>(
+                <div key={field} style={{flex:1}}>
+                  <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>{label}</div>
+                  <input type="text" value={p[field]||""} disabled={locked}
+                    onChange={e=>updP(dipIdx,day,field,e.target.value)}
+                    placeholder={ph}
+                    style={{width:"100%",background:"#080e1c",color:locked?"#475569":"#e2e8f0",
+                      border:`1px solid ${locked?"#0f1923":"#1e293b"}`,borderRadius:7,
+                      padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box",
+                      cursor:locked?"not-allowed":"text"}}/>
+                </div>
+              ))}
+              <div style={{flex:1}}>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ORE</div>
+                <div style={{background:"#080e1c",border:"1px solid #1e293b",borderRadius:7,
+                  padding:"10px",fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>
+                  {ore.toFixed(1)}h
+                </div>
+              </div>
             </div>
           )}
-          {(personale.dipendenti||[]).map((dip,i)=>(
-            <div key={i} onClick={()=>setSelDip(i)}
-              style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:16,
-                marginBottom:10,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{dip.nome||`Dipendente #${i+1}`}</div>
-              <div style={{fontSize:20,color:"#334155"}}>›</div>
-            </div>
-          ))}
-        </>}
 
-        {/* Presenze del giorno */}
-        {selDip!==null&&(()=>{
-          const dip = (personale.dipendenti||[])[selDip];
-          if (!dip) { setSelDip(null); return null; }
-          const p = getP(selDip, day);
-          const ore = calcOre(p.entrata, p.uscita);
-          const dateStr = `${String(day).padStart(2,"0")}/${String(month+1).padStart(2,"0")}/${year}`;
-          return (<>
-            <button onClick={()=>setSelDip(null)} style={{background:"#1e293b",color:"#e2e8f0",border:"none",
-              borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700,marginBottom:16}}>
-              ← Torna
-            </button>
-            <div style={{background:"#0f1923",borderRadius:14,borderLeft:"4px solid #60a5fa",padding:16,marginBottom:14}}>
-              <div style={{fontSize:11,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:4}}>
-                {dip.nome} — {dateStr}
-              </div>
-              <div style={{marginBottom:12}}>
-                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
-                <select value={p.tipo||"lavoro"} onChange={e=>updP(selDip,day,"tipo",e.target.value)}
-                  style={{width:"100%",background:"#080e1c",color:TIPO_COLOR[p.tipo||"lavoro"],
-                    border:"1px solid #1e293b",padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"inherit",fontWeight:700}}>
-                  {Object.entries(TIPO_IT).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-                </select>
-              </div>
-              {(p.tipo==="lavoro"||!p.tipo)&&<>
-                <div style={{display:"flex",gap:10,marginBottom:10}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ENTRATA</div>
-                    <input type="text" value={p.entrata||""} onChange={e=>updP(selDip,day,"entrata",e.target.value)}
-                      placeholder="08:00"
-                      style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
-                        borderRadius:7,padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box"}}/>
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>USCITA</div>
-                    <input type="text" value={p.uscita||""} onChange={e=>updP(selDip,day,"uscita",e.target.value)}
-                      placeholder="16:00"
-                      style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
-                        borderRadius:7,padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box"}}/>
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ORE</div>
-                    <div style={{background:"#080e1c",border:"1px solid #1e293b",borderRadius:7,padding:"10px",
-                      fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>{ore.toFixed(1)}h</div>
-                  </div>
-                </div>
-              </>}
-              <div>
-                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>NOTE</div>
-                <input type="text" value={p.nota||""} onChange={e=>updP(selDip,day,"nota",e.target.value)}
-                  placeholder="Note..."
-                  style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
-                    borderRadius:7,padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box"}}/>
-              </div>
-            </div>
+          {/* Note */}
+          <div>
+            <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>NOTE</div>
+            <input type="text" value={p.nota||""} disabled={locked}
+              onChange={e=>updP(dipIdx,day,"nota",e.target.value)}
+              placeholder="Note..."
+              style={{width:"100%",background:"#080e1c",color:locked?"#475569":"#e2e8f0",
+                border:`1px solid ${locked?"#0f1923":"#1e293b"}`,borderRadius:7,
+                padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box",
+                cursor:locked?"not-allowed":"text"}}/>
+          </div>
+        </div>
 
-            {/* Riepilogo settimana */}
-            <div style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
-              <div style={{fontSize:11,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:10}}>
-                QUESTO MESE — {MONTHS[month]}
+        {/* Storico mese */}
+        <div style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
+          <div style={{fontSize:11,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:10}}>
+            STORICO — {MONTHS[month]} {year}
+          </div>
+          {Array.from({length:days},(_,gi)=>{
+            const d=gi+1;
+            const pp=getP(dipIdx,d);
+            const oo=calcOre(pp.entrata,pp.uscita);
+            const has=pp.entrata||pp.uscita||pp.tipo==="malattia"||pp.tipo==="ferie"||pp.tipo==="permesso"||pp.tipo==="assenza";
+            if(!has) return null;
+            const wd=new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
+            const isTod=year===todayY&&month===todayM&&d===todayD;
+            return (
+              <div key={d} onClick={()=>setDay(d)}
+                style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",
+                  borderBottom:"1px solid #080e1c",fontSize:12,cursor:"pointer",
+                  background:isTod?"#0a1a2a":"transparent",borderRadius:isTod?4:0}}>
+                <span style={{color:isTod?"#60a5fa":"#64748b"}}>{wd} {d}{isTod?" 📍":""}</span>
+                <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
+                  {pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
+                  {pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
+                </span>
               </div>
-              {Array.from({length:days},(_,gi)=>{
-                const d=gi+1, pp=getP(selDip,d);
-                const oo=calcOre(pp.entrata,pp.uscita);
-                const has=pp.entrata||pp.uscita||pp.tipo==="malattia"||pp.tipo==="ferie"||pp.tipo==="permesso"||pp.tipo==="assenza";
-                if(!has) return null;
-                const wd=new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
-                return (
-                  <div key={d} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",
-                    borderBottom:"1px solid #080e1c",fontSize:12}}>
-                    <span style={{color:"#64748b"}}>{wd} {d}</span>
-                    <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
-                      {pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
-                      {pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </>);
-        })()}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -917,15 +967,23 @@ export default function App() {
   const now = new Date();
   const [all, setAll] = useState(load);
 
-  // ── PIN STATE v2 ──
+  // ── PIN STATE v3 ──
   const [pinScreen, setPinScreen] = useState(() => {
-    const session = getSession();
-    if (session) return null; // già loggato
-    if (!hasAdminPIN()) return null; // nessun PIN impostato → accesso libero
-    return "choose_role"; // mostra scelta ruolo
+    const s = getSession();
+    if (s) return null;
+    if (!hasAdminPIN()) return null;
+    return "choose_role";
   });
-  const [currentRole, setCurrentRole] = useState(() => getSession() || (hasAdminPIN() ? null : "admin"));
-  const [pinMode, setPinMode] = useState(null); // per setup/change da settings
+  const [currentRole, setCurrentRole] = useState(() => {
+    const s = getSession();
+    return s ? s.role : (hasAdminPIN() ? null : "admin");
+  });
+  const [currentDipIdx, setCurrentDipIdx] = useState(() => {
+    const s = getSession();
+    return s ? (s.dipIdx ?? null) : null;
+  });
+  const [pinMode, setPinMode] = useState(null);
+  const [pinModeTarget, setPinModeTarget] = useState(null); // idx dipendente per setup PIN
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -1158,14 +1216,18 @@ export default function App() {
   const mGuadagno = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
 
   // ── PIN: early returns ──
+  const dipCount = (all[pk(year,month)]?.dipendenti||[]).length;
+
   if (pinScreen === "choose_role") {
     return <PINScreen mode="choose_role" onSuccess={(role) => {
       if (role === "admin") {
         if (hasAdminPIN()) setPinScreen("unlock_admin");
         else { setCurrentRole("admin"); setPinScreen(null); }
       } else {
-        if (hasDipPIN()) setPinScreen("unlock_dip");
-        else { alert("Il PIN dipendente non è ancora impostato. Chiedi al titolare."); setPinScreen("choose_role"); }
+        // Controlla se esiste almeno un dipendente con PIN
+        const tot = Object.keys(localStorage).filter(k=>k.startsWith(DIP_PIN_PREFIX)).length;
+        if (tot > 0) setPinScreen("unlock_dip");
+        else { alert("Nessun PIN dipendente impostato. Chiedi al titolare."); }
       }
     }}/>;
   }
@@ -1175,8 +1237,20 @@ export default function App() {
       onCancel={(type) => { if(type==="recovery") setPinScreen("recovery"); }}/>;
   }
   if (pinScreen === "unlock_dip") {
+    // Schermata PIN dipendente — cerca quale dipendente corrisponde
     return <PINScreen mode="unlock" role="dipendente"
-      onSuccess={() => { setCurrentRole("dipendente"); setSession("dipendente"); setPinScreen(null); }}
+      onSuccess={async (_, pin) => {
+        // pin viene passato come secondo argomento da PINScreen
+        const idx = await matchDipPIN(pin, dipCount || 10);
+        if (idx >= 0) {
+          setCurrentRole("dipendente");
+          setCurrentDipIdx(idx);
+          setSession("dipendente", idx);
+          setPinScreen(null);
+        }
+        // se idx=-1 PINScreen gestisce già l'errore internamente
+      }}
+      onMatchDip={async (pin) => matchDipPIN(pin, dipCount || 10)}
       onCancel={null}/>;
   }
   if (pinScreen === "recovery") {
@@ -1186,18 +1260,24 @@ export default function App() {
   }
   if (pinMode) {
     return <PINScreen mode={pinMode} role={pinMode.includes("dip")?"dipendente":"admin"}
-      onSuccess={() => setPinMode(null)}
-      onCancel={() => setPinMode(null)}/>;
+      dipIdx={pinModeTarget}
+      onSuccess={async (_, pin) => {
+        if (pinMode === "setup_dip_idx" || pinMode === "change_dip_idx") {
+          await setDipIdxPIN(pinModeTarget, pin);
+        }
+        setPinMode(null); setPinModeTarget(null);
+      }}
+      onCancel={() => { setPinMode(null); setPinModeTarget(null); }}/>;
   }
 
-  // Vista dipendente — solo presenze
-  if (currentRole === "dipendente") {
+  // Vista dipendente — solo presenze del dipendente autenticato
+  if (currentRole === "dipendente" && currentDipIdx !== null) {
     return <DipendentView all={all} year={year} month={month} day={day}
       setYear={setYear} setMonth={setMonth} setDay={setDay}
       personale={all[pk(year,month)]||{dipendenti:[],presenze:{}}}
       onSave={(updated) => { const u={...all,[pk(year,month)]:updated}; setAll(u); persist(u); }}
-      onLock={() => { clearSession(); setCurrentRole(null); setPinScreen("choose_role"); }}
-      MONTHS={MONTHS} dim={dim} dk={dk}/>;
+      onLock={() => { clearSession(); setCurrentRole(null); setCurrentDipIdx(null); setPinScreen("choose_role"); }}
+      MONTHS={MONTHS} dim={dim} dk={dk} dipIdx={currentDipIdx}/>;
   }
 
   return (
@@ -1664,8 +1744,40 @@ export default function App() {
                       <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{dip.nome||`Dipendente #${selDip+1}`}</div>
                       <div style={{fontSize:10,color:"#64748b"}}>Tariffa: {eur(tariffa)}/ora</div>
                     </div>
-                    <button onClick={()=>delDipendente(selDip)&&setSelDip(null)} style={{marginLeft:"auto",background:"#1a0a0a",color:"#f87171",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕ Rimuovi</button>
+                    <button onClick={()=>{
+                      if(window.confirm(`Rimuovere "${dip.nome||`Dipendente #${selDip+1}`}"?\nQuesta azione non può essere annullata.`)) {
+                        removeDipIdxPIN(selDip);
+                        delDipendente(selDip);
+                        setSelDip(null);
+                      }
+                    }} style={{marginLeft:"auto",background:"#1a0a0a",color:"#f87171",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕ Rimuovi</button>
                   </div>
+
+                  {/* PIN DIPENDENTE */}
+                  <Block title="Accesso Dipendente" accent="#60a5fa">
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>
+                      {hasDipIdxPIN(selDip)
+                        ? `PIN attivo — ${dip.nome||"questo dipendente"} può accedere all'area presenze.`
+                        : `Nessun PIN — ${dip.nome||"questo dipendente"} non può ancora accedere.`}
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>{ setPinModeTarget(selDip); setPinMode("setup_dip_idx"); }}
+                        style={{flex:1,background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",
+                          borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        {hasDipIdxPIN(selDip) ? "🔄 Cambia PIN" : "🔒 Imposta PIN"}
+                      </button>
+                      {hasDipIdxPIN(selDip)&&(
+                        <button onClick={()=>{ if(window.confirm(`Rimuovere il PIN di ${dip.nome}?`)) removeDipIdxPIN(selDip); }}
+                          style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",
+                            borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          ✕ Rimuovi PIN
+                        </button>
+                      )}
+                    </div>
+                    <div style={{fontSize:10,color:"#334155",marginTop:8}}>
+                      Il PIN è a 4 cifre. Se lo dimentica, reimpostalo da qui.
+                    </div>
+                  </Block>
 
                   {/* DATI CONTRATTUALI */}
                   <Block title="Dati Contrattuali" accent="#60a5fa">
@@ -2019,7 +2131,7 @@ export default function App() {
                 <div style={{fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:1,marginBottom:10}}>🔐 SICUREZZA PIN</div>
 
                 {/* PIN ADMIN */}
-                <div style={{marginBottom:10}}>
+                <div style={{marginBottom:8}}>
                   <div style={{fontSize:11,color:"#94a3b8",marginBottom:6}}>
                     👔 PIN Admin (6 cifre) — {hasAdminPIN() ? "✅ attivo" : "❌ non impostato"}
                   </div>
@@ -2041,33 +2153,9 @@ export default function App() {
                     )}
                   </div>
                 </div>
-
-                {/* PIN DIPENDENTE */}
-                {hasAdminPIN()&&<div style={{borderTop:"1px solid #1e293b",paddingTop:10}}>
-                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:6}}>
-                    👤 PIN Dipendente (4 cifre) — {hasDipPIN() ? "✅ attivo" : "❌ non impostato"}
-                  </div>
-                  <div style={{fontSize:10,color:"#475569",marginBottom:8,lineHeight:1.5}}>
-                    Il dipendente accede solo alla sezione Presenze.
-                  </div>
-                  <div style={{display:"flex",gap:8}}>
-                    {!hasDipPIN() ? (
-                      <button onClick={()=>setPinMode("setup_dip")} style={{flex:1,background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                        🔒 Imposta PIN Dipendente
-                      </button>
-                    ) : (
-                      <>
-                        <button onClick={()=>setPinMode("change_dip")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                          🔄 Cambia
-                        </button>
-                        <button onClick={()=>{ if(window.confirm("Rimuovere il PIN dipendente?")) removeDipPIN(); }}
-                          style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                          ✕ Rimuovi
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>}
+                <div style={{fontSize:10,color:"#334155",marginTop:6}}>
+                  I PIN dipendenti si impostano nella scheda di ogni dipendente (tab Personale).
+                </div>
               </div>
 
               <button onClick={()=>{
