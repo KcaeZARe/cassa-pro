@@ -2250,7 +2250,6 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                  </div>
                 </div>
                 <div style={{fontSize:10,color:"#334155",marginTop:6}}>
                   I PIN dipendenti si impostano nella scheda di ogni dipendente (tab Personale).
