@@ -711,8 +711,9 @@ const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
       const p = (personale.presenze || {})[presKey] || {};
       if (p.tipo === "lavoro" || !p.tipo) {
         if (p.entrata && p.uscita) {
-          const [eh,em] = p.entrata.split(":").map(Number);
-          const [uh,um] = p.uscita.split(":").map(Number);
+          const norm = (t) => t.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
+          const [eh,em] = norm(p.entrata).split(":").map(Number);
+          const [uh,um] = norm(p.uscita).split(":").map(Number);
           if (!isNaN(eh) && !isNaN(uh)) oreTot += Math.max(0, ((uh*60+um)-(eh*60+em))/60);
         }
       }
@@ -867,7 +868,8 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
   };
   const calcOre = (e,u) => {
     if (!e||!u) return 0;
-    const [eh,em]=e.split(":").map(Number), [uh,um]=u.split(":").map(Number);
+    const norm = (t) => t.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
+    const [eh,em]=norm(e).split(":").map(Number), [uh,um]=norm(u).split(":").map(Number);
     if(isNaN(eh)||isNaN(uh)) return 0;
     return Math.max(0,((uh*60+um)-(eh*60+em))/60);
   };
@@ -962,6 +964,11 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
                   <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>{label}</div>
                   <input type="text" value={p[field]||""} disabled={locked}
                     onChange={e=>updP(dipIdx,day,field,e.target.value)}
+                    onBlur={e=>{
+                      // Normalizza automaticamente: 20;00 → 20:00
+                      const v = e.target.value.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
+                      if (v !== e.target.value) updP(dipIdx,day,field,v);
+                    }}
                     placeholder={ph}
                     style={{width:"100%",background:"#080e1c",color:locked?"#475569":"#e2e8f0",
                       border:`1px solid ${locked?"#0f1923":"#1e293b"}`,borderRadius:7,
@@ -1237,8 +1244,9 @@ export default function App() {
 
   const calcOre = (entrata, uscita) => {
     if (!entrata || !uscita) return 0;
-    const [eh, em] = entrata.split(":").map(Number);
-    const [uh, um] = uscita.split(":").map(Number);
+    const norm = (t) => t.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
+    const [eh, em] = norm(entrata).split(":").map(Number);
+    const [uh, um] = norm(uscita).split(":").map(Number);
     if (isNaN(eh)||isNaN(uh)) return 0;
     const mins = (uh*60+um) - (eh*60+em);
     return Math.max(0, mins/60);
