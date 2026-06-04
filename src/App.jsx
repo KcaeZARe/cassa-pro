@@ -225,11 +225,10 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
       if (mode === "setup_admin" || mode === "change_admin") {
         await setAdminPIN(pin, recoveryCode.replace(/-/g,""));
         setStep("show_recovery");
-      } else if (mode === "setup_dip_idx" || mode === "change_dip_idx") {
-        await setDipIdxPIN(dipIdx, pin);
-        onSuccess("saved");
       } else {
-        onSuccess("saved");
+        // Per tutti gli altri modi (setup_dip_idx, change_dip_idx ecc.)
+        // passa il pin grezzo a onSuccess così App può salvarlo
+        onSuccess("saved", pin);
       }
     }
   };
@@ -1417,8 +1416,9 @@ export default function App() {
   }
   if (pinMode) {
     const handlePinModeSuccess = async (_, pin) => {
-      if (pinMode === "setup_dip_idx" || pinMode === "change_dip_idx") {
+      if ((pinMode === "setup_dip_idx" || pinMode === "change_dip_idx") && pin) {
         await setDipIdxPIN(pinModeTarget, pin);
+        console.log(`PIN dipendente ${pinModeTarget} salvato con hash:`, localStorage.getItem(getDipIdxPINKey(pinModeTarget))?.slice(0,8)+"...");
       }
       setPinMode(null); setPinModeTarget(null);
     };
