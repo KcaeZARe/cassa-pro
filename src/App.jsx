@@ -1,4 +1,241 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+
+// ── PIN SYSTEM ─────────────────────────────────────────────
+const PIN_KEY = "cassapro_pin_hash";
+const PIN_UNLOCKED_KEY = "cassapro_pin_session";
+const PIN_ATTEMPTS_KEY = "cassapro_pin_attempts";
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 60 * 1000; // 1 minuto
+
+const hashPIN = async (pin) => {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin + "cassapro_salt_v1"));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+};
+
+const getPINHash = () => localStorage.getItem(PIN_KEY);
+const setPINHash = (h) => localStorage.setItem(PIN_KEY, h);
+const removePIN = () => { localStorage.removeItem(PIN_KEY); localStorage.removeItem(PIN_UNLOCKED_KEY); };
+const isSessionUnlocked = () => {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(PIN_UNLOCKED_KEY) || "null");
+    if (!s) return false;
+    if (Date.now() - s.ts > 8 * 60 * 60 * 1000) { sessionStorage.removeItem(PIN_UNLOCKED_KEY); return false; } // 8h
+    return true;
+  } catch { return false; }
+};
+const setSessionUnlocked = () => sessionStorage.setItem(PIN_UNLOCKED_KEY, JSON.stringify({ ts: Date.now() }));
+const lockSession = () => sessionStorage.removeItem(PIN_UNLOCKED_KEY);
+
+const getAttempts = () => { try { return JSON.parse(localStorage.getItem(PIN_ATTEMPTS_KEY) || '{"count":0,"ts":0}'); } catch { return { count: 0, ts: 0 }; } };
+const setAttempts = (obj) => localStorage.setItem(PIN_ATTEMPTS_KEY, JSON.stringify(obj));
+const resetAttempts = () => localStorage.removeItem(PIN_ATTEMPTS_KEY);
+
+function PINScreen({ mode, onSuccess, onCancel }) {
+  // mode: "unlock" | "setup" | "change"
+  const [digits, setDigits] = useState(["","","","","",""]); // 6 cifre
+  const [confirm, setConfirm] = useState(["","","","","",""]);
+  const [step, setStep] = useState("enter"); // "enter" | "confirm"
+  const [error, setError] = useState("");
+  const [lockout, setLockout] = useState(0); // secondi rimasti
+  const refs = useRef([]);
+  const confirmRefs = useRef([]);
+
+  useEffect(() => {
+    const a = getAttempts();
+    if (a.count >= MAX_ATTEMPTS) {
+      const remaining = Math.ceil((a.ts + LOCKOUT_MS - Date.now()) / 1000);
+      if (remaining > 0) { setLockout(remaining); } else { resetAttempts(); }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (lockout <= 0) return;
+    const t = setInterval(() => {
+      setLockout(s => { if (s <= 1) { resetAttempts(); clearInterval(t); return 0; } return s - 1; });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [lockout]);
+
+  useEffect(() => { refs.current[0]?.focus(); }, []);
+
+  const handleDigit = (arr, setArr, arrRefs, idx, val) => {
+    const clean = val.replace(/\D/g, "").slice(-1);
+    const next = [...arr]; next[idx] = clean; setArr(next);
+    if (clean && idx < 5) setTimeout(() => arrRefs.current[idx + 1]?.focus(), 10);
+    if (!clean && idx > 0) setTimeout(() => arrRefs.current[idx - 1]?.focus(), 10);
+  };
+
+  const handleKey = (arr, setArr, arrRefs, idx, e) => {
+    if (e.key === "Backspace" && !arr[idx] && idx > 0) {
+      const next = [...arr]; next[idx - 1] = ""; setArr(next);
+      setTimeout(() => arrRefs.current[idx - 1]?.focus(), 10);
+    }
+  };
+
+  const pin = digits.join("");
+  const confirmPin = confirm.join("");
+
+  const handleSubmit = async () => {
+    if (pin.length < 6) return;
+    setError("");
+    if (mode === "unlock") {
+      const attempts = getAttempts();
+      const expected = getPINHash();
+      const hash = await hashPIN(pin);
+      if (hash === expected) {
+        resetAttempts(); setSessionUnlocked(); onSuccess();
+      } else {
+        const newCount = (attempts.count || 0) + 1;
+        setAttempts({ count: newCount, ts: Date.now() });
+        if (newCount >= MAX_ATTEMPTS) {
+          setLockout(Math.ceil(LOCKOUT_MS / 1000));
+          setError("Troppi tentativi. Bloccato per 60 secondi.");
+        } else {
+          setError(`PIN errato. Tentativi rimasti: ${MAX_ATTEMPTS - newCount}`);
+        }
+        setDigits(["","","","","",""]);
+        setTimeout(() => refs.current[0]?.focus(), 50);
+      }
+    } else {
+      // setup / change
+      if (step === "enter") {
+        setStep("confirm");
+        setConfirm(["","","","","",""]);
+        setTimeout(() => confirmRefs.current[0]?.focus(), 50);
+      } else {
+        if (pin !== confirmPin) {
+          setError("I PIN non coincidono. Riprova.");
+          setConfirm(["","","","",""]);
+          setStep("enter");
+          setDigits(["","","","","",""]);
+          setTimeout(() => refs.current[0]?.focus(), 50);
+          return;
+        }
+        const hash = await hashPIN(pin);
+        setPINHash(hash); setSessionUnlocked(); onSuccess();
+      }
+    }
+  };
+
+  const DOT_COLOR = "#4ade80";
+  const DOT_EMPTY = "#1e293b";
+
+  const renderDots = (arr) => (
+    <div style={{ display: "flex", gap: 12, justifyContent: "center", margin: "18px 0" }}>
+      {arr.map((d, i) => (
+        <div key={i} style={{
+          width: 14, height: 14, borderRadius: "50%",
+          background: d ? DOT_COLOR : DOT_EMPTY,
+          border: `2px solid ${d ? DOT_COLOR : "#334155"}`,
+          transition: "background 0.1s"
+        }} />
+      ))}
+    </div>
+  );
+
+  const renderInputs = (arr, setArr, arrRefs, active) => (
+    <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
+      {arr.map((d, i) => (
+        <input
+          key={i}
+          ref={el => arrRefs.current[i] = el}
+          type="password"
+          inputMode="numeric"
+          maxLength={1}
+          value={d}
+          disabled={!active || lockout > 0}
+          onChange={e => handleDigit(arr, setArr, arrRefs, i, e.target.value)}
+          onKeyDown={e => handleKey(arr, setArr, arrRefs, i, e)}
+          onFocus={e => e.target.select()}
+          style={{
+            width: 44, height: 54, textAlign: "center", fontSize: 22, fontWeight: 700,
+            background: "#080e1c", color: "#e2e8f0",
+            border: `2px solid ${d ? "#4ade80" : "#1e293b"}`,
+            borderRadius: 10, outline: "none", caretColor: "transparent",
+            fontFamily: "inherit", transition: "border 0.15s",
+            opacity: active ? 1 : 0.4,
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  const isSetup = mode === "setup" || mode === "change";
+  const titleMap = { unlock: "🔐 ACCESSO", setup: "⚙️ IMPOSTA PIN", change: "🔄 CAMBIA PIN" };
+  const subtitleMap = {
+    unlock: "Inserisci il tuo PIN a 6 cifre",
+    setup: step === "enter" ? "Scegli un PIN a 6 cifre" : "Conferma il PIN",
+    change: step === "enter" ? "Nuovo PIN a 6 cifre" : "Conferma il nuovo PIN",
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#05090f", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono','Courier New',monospace", padding: 24
+    }}>
+      <div style={{
+        background: "#0d1526", borderRadius: 20, padding: "36px 32px 28px",
+        maxWidth: 380, width: "100%", border: "1px solid #1e293b",
+        boxShadow: "0 0 60px #4ade8011"
+      }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 2, color: "#f8fafc", marginBottom: 4 }}>◈ CASSA PRO</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#4ade80", letterSpacing: 1.5, marginBottom: 8 }}>{titleMap[mode]}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>{subtitleMap[isSetup ? mode : "unlock"]}</div>
+          {isSetup && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{subtitleMap[mode]}</div>}
+        </div>
+
+        {isSetup ? (
+          step === "enter" ? (
+            <>
+              {renderDots(digits)}
+              {renderInputs(digits, setDigits, refs, true)}
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "center", marginBottom: 8 }}>Ripeti il PIN per confermare</div>
+              {renderDots(confirm)}
+              {renderInputs(confirm, setConfirm, confirmRefs, true)}
+            </>
+          )
+        ) : (
+          <>
+            {lockout > 0 && (
+              <div style={{ textAlign: "center", color: "#f87171", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+                🔒 Bloccato — riprova tra {lockout}s
+              </div>
+            )}
+            {renderDots(digits)}
+            {renderInputs(digits, setDigits, refs, lockout === 0)}
+          </>
+        )}
+
+        {error && <div style={{ color: "#f87171", fontSize: 12, textAlign: "center", marginTop: 8, marginBottom: 4 }}>{error}</div>}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
+          <button
+            onClick={handleSubmit}
+            disabled={lockout > 0 || (isSetup && step === "enter" ? pin.length < 6 : isSetup ? confirmPin.length < 6 : pin.length < 6)}
+            style={{
+              width: "100%", background: "#14532d", color: "#4ade80",
+              border: "1px solid #166534", borderRadius: 10, padding: 14,
+              fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+              opacity: (pin.length < 6 && !isSetup) || lockout > 0 ? 0.5 : 1,
+            }}>
+            {isSetup ? (step === "enter" ? "Continua →" : "✅ Salva PIN") : "Accedi"}
+          </button>
+          {onCancel && (
+            <button onClick={onCancel} style={{
+              width: "100%", background: "transparent", color: "#475569",
+              border: "1px solid #1e293b", borderRadius: 10, padding: 12,
+              fontSize: 12, cursor: "pointer", fontFamily: "inherit"
+            }}>Annulla</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── GOOGLE DRIVE SYNC ──────────────────────────────────────
 const GDRIVE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || "";
@@ -178,6 +415,11 @@ const TABS = [
 export default function App() {
   const now = new Date();
   const [all, setAll] = useState(load);
+
+  // ── PIN STATE ──
+  const [pinUnlocked, setPinUnlocked] = useState(() => !getPINHash() || isSessionUnlocked());
+  const [pinMode, setPinMode] = useState(null); // null | "setup" | "change"
+  const hasPIN = !!getPINHash();
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -411,6 +653,14 @@ export default function App() {
 
   const mGuadagno = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
 
+  // ── PIN: early returns ──
+  if (!pinUnlocked) {
+    return <PINScreen mode="unlock" onSuccess={() => { setSessionUnlocked(); setPinUnlocked(true); }} />;
+  }
+  if (pinUnlocked && pinMode) {
+    return <PINScreen mode={pinMode} onSuccess={() => setPinMode(null)} onCancel={() => setPinMode(null)} />;
+  }
+
   return (
     <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
 
@@ -423,6 +673,13 @@ export default function App() {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            {/* Pulsante lock */}
+            <button
+              onClick={() => hasPIN ? (lockSession(), setPinUnlocked(false)) : setPinMode("setup")}
+              title={hasPIN ? "Blocca app" : "Imposta PIN"}
+              style={{background:"#1e293b",color: hasPIN ? "#fbbf24" : "#475569",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              {hasPIN ? "🔒" : "🔓"}
+            </button>
             <button onClick={()=>setView(v=>v==="day"?"month":"day")}
               style={{background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               {view==="day"?"MESE ▸":"◂ GIORNO"}
@@ -937,6 +1194,31 @@ export default function App() {
               </Block>
 
               <button onClick={()=>window.print()} style={{width:"100%",background:"#0f1923",color:"#64748b",border:"1px solid #1e293b",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>🖨️ Stampa / Salva PDF</button>
+
+              {/* PIN MANAGEMENT */}
+              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e293b"}}>
+                <div style={{fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:1,marginBottom:10}}>🔐 SICUREZZA PIN</div>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>
+                  {hasPIN ? "PIN attivo — l'app è protetta all'avvio." : "Nessun PIN impostato — l'app è accessibile senza protezione."}
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  {!hasPIN ? (
+                    <button onClick={()=>setPinMode("setup")} style={{flex:1,background:"#1a1400",color:"#fbbf24",border:"1px solid #713f12",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                      🔒 Imposta PIN
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={()=>setPinMode("change")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        🔄 Cambia PIN
+                      </button>
+                      <button onClick={()=>{ if(window.confirm("Rimuovere il PIN? L'app non sarà più protetta.")) { removePIN(); setPinUnlocked(true); } }}
+                        style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        ✕ Rimuovi PIN
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
 
               <button onClick={()=>{
                 const blob = new Blob([JSON.stringify(all, null, 2)], {type:"application/json"});
