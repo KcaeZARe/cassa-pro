@@ -1,235 +1,404 @@
 import { useState, useEffect, useRef } from "react";
 
-// ── PIN SYSTEM ─────────────────────────────────────────────
-const PIN_KEY = "cassapro_pin_hash";
-const PIN_UNLOCKED_KEY = "cassapro_pin_session";
-const PIN_ATTEMPTS_KEY = "cassapro_pin_attempts";
+// ── PIN SYSTEM v2 — ADMIN + DIPENDENTE ─────────────────────
+const ADMIN_PIN_KEY    = "cassapro_pin_admin_hash";
+const DIP_PIN_KEY      = "cassapro_pin_dip_hash";
+const RECOVERY_KEY     = "cassapro_recovery_hash";
+const SESSION_KEY      = "cassapro_session_v2";
+const ATTEMPTS_KEY     = "cassapro_attempts_v2";
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 60 * 1000; // 1 minuto
+const LOCKOUT_MS   = 60 * 1000;
 
-const hashPIN = async (pin) => {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin + "cassapro_salt_v1"));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+// hash SHA-256
+const sha256 = async (str) => {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+};
+const hashPIN      = (pin)  => sha256(pin  + "cassapro_pin_salt_v2");
+const hashRecovery = (code) => sha256(code + "cassapro_rec_salt_v2");
+
+// genera codice recovery 24 caratteri leggibile
+const genRecoveryCode = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 24; i++) {
+    if (i > 0 && i % 6 === 0) code += "-";
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code; // es. ABCD23-EFGH45-IJKL67-MNPQ89
 };
 
-const getPINHash = () => localStorage.getItem(PIN_KEY);
-const setPINHash = (h) => localStorage.setItem(PIN_KEY, h);
-const removePIN = () => { localStorage.removeItem(PIN_KEY); localStorage.removeItem(PIN_UNLOCKED_KEY); };
-const isSessionUnlocked = () => {
+// storage helpers
+const getAdminHash    = () => localStorage.getItem(ADMIN_PIN_KEY);
+const getDipHash      = () => localStorage.getItem(DIP_PIN_KEY);
+const getRecoveryHash = () => localStorage.getItem(RECOVERY_KEY);
+const hasAdminPIN     = () => !!getAdminHash();
+const hasDipPIN       = () => !!getDipHash();
+
+const setAdminPIN = async (pin, recoveryCode) => {
+  localStorage.setItem(ADMIN_PIN_KEY, await hashPIN(pin));
+  localStorage.setItem(RECOVERY_KEY,  await hashRecovery(recoveryCode));
+};
+const setDipPIN = async (pin) => {
+  localStorage.setItem(DIP_PIN_KEY, await hashPIN(pin));
+};
+const removeAdminPIN = () => {
+  localStorage.removeItem(ADMIN_PIN_KEY);
+  localStorage.removeItem(RECOVERY_KEY);
+  localStorage.removeItem(DIP_PIN_KEY); // rimuove anche dip se esiste
+};
+const removeDipPIN = () => localStorage.removeItem(DIP_PIN_KEY);
+
+// sessione: role = "admin" | "dipendente" | null
+const getSession = () => {
   try {
-    const s = JSON.parse(sessionStorage.getItem(PIN_UNLOCKED_KEY) || "null");
-    if (!s) return false;
-    if (Date.now() - s.ts > 8 * 60 * 60 * 1000) { sessionStorage.removeItem(PIN_UNLOCKED_KEY); return false; } // 8h
-    return true;
-  } catch { return false; }
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
+    if (!s) return null;
+    const maxAge = s.role === "admin" ? 8*60*60*1000 : 12*60*60*1000;
+    if (Date.now() - s.ts > maxAge) { sessionStorage.removeItem(SESSION_KEY); return null; }
+    return s.role;
+  } catch { return null; }
 };
-const setSessionUnlocked = () => sessionStorage.setItem(PIN_UNLOCKED_KEY, JSON.stringify({ ts: Date.now() }));
-const lockSession = () => sessionStorage.removeItem(PIN_UNLOCKED_KEY);
+const setSession = (role) => sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role, ts: Date.now() }));
+const clearSession = () => sessionStorage.removeItem(SESSION_KEY);
 
-const getAttempts = () => { try { return JSON.parse(localStorage.getItem(PIN_ATTEMPTS_KEY) || '{"count":0,"ts":0}'); } catch { return { count: 0, ts: 0 }; } };
-const setAttempts = (obj) => localStorage.setItem(PIN_ATTEMPTS_KEY, JSON.stringify(obj));
-const resetAttempts = () => localStorage.removeItem(PIN_ATTEMPTS_KEY);
+// tentativi per ruolo
+const getAttempts = (role) => {
+  try { return JSON.parse(localStorage.getItem(ATTEMPTS_KEY+"_"+role) || '{"count":0,"ts":0}'); }
+  catch { return { count:0, ts:0 }; }
+};
+const setAttempts = (role, obj) => localStorage.setItem(ATTEMPTS_KEY+"_"+role, JSON.stringify(obj));
+const resetAttempts = (role) => localStorage.removeItem(ATTEMPTS_KEY+"_"+role);
 
-function PINScreen({ mode, onSuccess, onCancel }) {
-  // mode: "unlock" | "setup" | "change"
-  const [digits, setDigits] = useState(["","","","","",""]); // 6 cifre
-  const [confirm, setConfirm] = useState(["","","","","",""]);
-  const [step, setStep] = useState("enter"); // "enter" | "confirm"
-  const [error, setError] = useState("");
-  const [lockout, setLockout] = useState(0); // secondi rimasti
-  const refs = useRef([]);
+// ── Componente schermata PIN ────────────────────────────────
+function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole }) {
+  /*
+    mode:  "choose_role" | "unlock" | "setup_admin" | "change_admin"
+           "setup_dip" | "change_dip" | "recovery"
+    role:  "admin" | "dipendente"
+  */
+  const LEN = (mode === "setup_dip" || mode === "change_dip" || (mode === "unlock" && role === "dipendente")) ? 4 : 6;
+  const emptyDigits = () => Array(LEN).fill("");
+
+  const [digits,  setDigits]  = useState(emptyDigits);
+  const [confirm, setConfirm] = useState(emptyDigits);
+  const [step,    setStep]    = useState("enter"); // "enter" | "confirm" | "show_recovery"
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryInput, setRecoveryInput] = useState("");
+  const [error,   setError]   = useState("");
+  const [lockout, setLockout] = useState(0);
+  const refs        = useRef([]);
   const confirmRefs = useRef([]);
 
   useEffect(() => {
-    const a = getAttempts();
-    if (a.count >= MAX_ATTEMPTS) {
-      const remaining = Math.ceil((a.ts + LOCKOUT_MS - Date.now()) / 1000);
-      if (remaining > 0) { setLockout(remaining); } else { resetAttempts(); }
+    if (mode === "unlock") {
+      const r = role || "admin";
+      const a = getAttempts(r);
+      if (a.count >= MAX_ATTEMPTS) {
+        const rem = Math.ceil((a.ts + LOCKOUT_MS - Date.now()) / 1000);
+        if (rem > 0) setLockout(rem); else resetAttempts(r);
+      }
     }
-  }, []);
+  }, [mode, role]);
 
   useEffect(() => {
     if (lockout <= 0) return;
-    const t = setInterval(() => {
-      setLockout(s => { if (s <= 1) { resetAttempts(); clearInterval(t); return 0; } return s - 1; });
-    }, 1000);
+    const t = setInterval(() => setLockout(s => {
+      if (s <= 1) { resetAttempts(role||"admin"); clearInterval(t); return 0; }
+      return s - 1;
+    }), 1000);
     return () => clearInterval(t);
   }, [lockout]);
 
-  useEffect(() => { refs.current[0]?.focus(); }, []);
+  useEffect(() => { setTimeout(() => refs.current[0]?.focus(), 80); }, [mode, step]);
 
-  const handleDigit = (arr, setArr, arrRefs, idx, val) => {
-    const clean = val.replace(/\D/g, "").slice(-1);
+  const handleDigit = (arr, setArr, arrRefs, len, idx, val) => {
+    const clean = val.replace(/\D/g,"").slice(-1);
     const next = [...arr]; next[idx] = clean; setArr(next);
-    if (clean && idx < 5) setTimeout(() => arrRefs.current[idx + 1]?.focus(), 10);
-    if (!clean && idx > 0) setTimeout(() => arrRefs.current[idx - 1]?.focus(), 10);
+    if (clean && idx < len-1) setTimeout(() => arrRefs.current[idx+1]?.focus(), 10);
+    if (!clean && idx > 0)    setTimeout(() => arrRefs.current[idx-1]?.focus(), 10);
   };
-
   const handleKey = (arr, setArr, arrRefs, idx, e) => {
     if (e.key === "Backspace" && !arr[idx] && idx > 0) {
-      const next = [...arr]; next[idx - 1] = ""; setArr(next);
-      setTimeout(() => arrRefs.current[idx - 1]?.focus(), 10);
+      const next=[...arr]; next[idx-1]=""; setArr(next);
+      setTimeout(() => arrRefs.current[idx-1]?.focus(), 10);
     }
   };
 
-  const pin = digits.join("");
+  const pin        = digits.join("");
   const confirmPin = confirm.join("");
+  const isSetup    = mode.startsWith("setup") || mode.startsWith("change");
 
   const handleSubmit = async () => {
-    if (pin.length < 6) return;
     setError("");
+    const r = role || "admin";
+
+    // ── UNLOCK ──
     if (mode === "unlock") {
-      const attempts = getAttempts();
-      const expected = getPINHash();
+      const expected = r === "admin" ? getAdminHash() : getDipHash();
       const hash = await hashPIN(pin);
       if (hash === expected) {
-        resetAttempts(); setSessionUnlocked(); onSuccess();
+        resetAttempts(r); setSession(r); onSuccess(r);
       } else {
-        const newCount = (attempts.count || 0) + 1;
-        setAttempts({ count: newCount, ts: Date.now() });
+        const a = getAttempts(r);
+        const newCount = (a.count||0) + 1;
+        setAttempts(r, { count: newCount, ts: Date.now() });
         if (newCount >= MAX_ATTEMPTS) {
-          setLockout(Math.ceil(LOCKOUT_MS / 1000));
-          setError("Troppi tentativi. Bloccato per 60 secondi.");
+          setLockout(Math.ceil(LOCKOUT_MS/1000));
+          setError("Troppi tentativi — bloccato 60s");
         } else {
           setError(`PIN errato. Tentativi rimasti: ${MAX_ATTEMPTS - newCount}`);
         }
-        setDigits(["","","","","",""]);
+        setDigits(emptyDigits());
         setTimeout(() => refs.current[0]?.focus(), 50);
       }
-    } else {
-      // setup / change
-      if (step === "enter") {
+      return;
+    }
+
+    // ── RECOVERY ──
+    if (mode === "recovery") {
+      const clean = recoveryInput.replace(/-/g,"").toUpperCase();
+      const hash = await hashRecovery(clean.length === 24 ? clean.match(/.{6}/g).join("-") : recoveryInput.toUpperCase());
+      // prova entrambi i formati
+      const h1 = await hashRecovery(recoveryInput.toUpperCase().trim());
+      const h2 = await hashRecovery(recoveryInput.toUpperCase().trim().replace(/[^A-Z0-9]/g,"").match(/.{1,6}/g)?.join("-")||"");
+      if (h1 === getRecoveryHash() || h2 === getRecoveryHash()) {
+        removeAdminPIN(); onSuccess("recovery");
+      } else {
+        setError("Codice non valido. Controlla e riprova.");
+      }
+      return;
+    }
+
+    // ── SETUP / CHANGE ──
+    if (step === "enter") {
+      if (mode === "setup_admin" || mode === "change_admin") {
+        const code = genRecoveryCode();
+        setRecoveryCode(code);
         setStep("confirm");
-        setConfirm(["","","","","",""]);
+        setConfirm(emptyDigits());
         setTimeout(() => confirmRefs.current[0]?.focus(), 50);
       } else {
-        if (pin !== confirmPin) {
-          setError("I PIN non coincidono. Riprova.");
-          setConfirm(["","","","",""]);
-          setStep("enter");
-          setDigits(["","","","","",""]);
-          setTimeout(() => refs.current[0]?.focus(), 50);
-          return;
-        }
-        const hash = await hashPIN(pin);
-        setPINHash(hash); setSessionUnlocked(); onSuccess();
+        setStep("confirm");
+        setConfirm(emptyDigits());
+        setTimeout(() => confirmRefs.current[0]?.focus(), 50);
+      }
+    } else if (step === "confirm") {
+      if (pin !== confirmPin) {
+        setError("I PIN non coincidono. Riprova.");
+        setStep("enter"); setDigits(emptyDigits()); setConfirm(emptyDigits());
+        setTimeout(() => refs.current[0]?.focus(), 50);
+        return;
+      }
+      if (mode === "setup_admin" || mode === "change_admin") {
+        await setAdminPIN(pin, recoveryCode.replace(/-/g,""));
+        setStep("show_recovery");
+      } else {
+        await setDipPIN(pin);
+        onSuccess("saved");
       }
     }
   };
 
-  const DOT_COLOR = "#4ade80";
-  const DOT_EMPTY = "#1e293b";
+  // ── RENDER ──
+  const DOT_ON  = role === "dipendente" ? "#60a5fa" : "#4ade80";
+  const DOT_OFF = "#1e293b";
 
   const renderDots = (arr) => (
-    <div style={{ display: "flex", gap: 12, justifyContent: "center", margin: "18px 0" }}>
-      {arr.map((d, i) => (
-        <div key={i} style={{
-          width: 14, height: 14, borderRadius: "50%",
-          background: d ? DOT_COLOR : DOT_EMPTY,
-          border: `2px solid ${d ? DOT_COLOR : "#334155"}`,
-          transition: "background 0.1s"
-        }} />
-      ))}
+    <div style={{display:"flex",gap:12,justifyContent:"center",margin:"18px 0"}}>
+      {arr.map((d,i) => <div key={i} style={{width:14,height:14,borderRadius:"50%",
+        background:d?DOT_ON:DOT_OFF, border:`2px solid ${d?DOT_ON:"#334155"}`,transition:"background 0.1s"}}/>)}
     </div>
   );
 
   const renderInputs = (arr, setArr, arrRefs, active) => (
-    <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 8 }}>
-      {arr.map((d, i) => (
-        <input
-          key={i}
-          ref={el => arrRefs.current[i] = el}
-          type="password"
-          inputMode="numeric"
-          maxLength={1}
-          value={d}
-          disabled={!active || lockout > 0}
-          onChange={e => handleDigit(arr, setArr, arrRefs, i, e.target.value)}
-          onKeyDown={e => handleKey(arr, setArr, arrRefs, i, e)}
-          onFocus={e => e.target.select()}
-          style={{
-            width: 44, height: 54, textAlign: "center", fontSize: 22, fontWeight: 700,
-            background: "#080e1c", color: "#e2e8f0",
-            border: `2px solid ${d ? "#4ade80" : "#1e293b"}`,
-            borderRadius: 10, outline: "none", caretColor: "transparent",
-            fontFamily: "inherit", transition: "border 0.15s",
-            opacity: active ? 1 : 0.4,
-          }}
-        />
+    <div style={{display:"flex",gap:10,justifyContent:"center",marginBottom:8}}>
+      {arr.map((d,i) => (
+        <input key={i} ref={el=>arrRefs.current[i]=el}
+          type="password" inputMode="numeric" maxLength={1} value={d}
+          disabled={!active||lockout>0}
+          onChange={e=>handleDigit(arr,setArr,arrRefs,arr.length,i,e.target.value)}
+          onKeyDown={e=>handleKey(arr,setArr,arrRefs,i,e)}
+          onFocus={e=>e.target.select()}
+          style={{width:44,height:54,textAlign:"center",fontSize:22,fontWeight:700,
+            background:"#080e1c",color:"#e2e8f0",
+            border:`2px solid ${d?DOT_ON:"#1e293b"}`,
+            borderRadius:10,outline:"none",caretColor:"transparent",
+            fontFamily:"inherit",transition:"border 0.15s",opacity:active?1:0.4}}/>
       ))}
     </div>
   );
 
-  const isSetup = mode === "setup" || mode === "change";
-  const titleMap = { unlock: "🔐 ACCESSO", setup: "⚙️ IMPOSTA PIN", change: "🔄 CAMBIA PIN" };
-  const subtitleMap = {
-    unlock: "Inserisci il tuo PIN a 6 cifre",
-    setup: step === "enter" ? "Scegli un PIN a 6 cifre" : "Conferma il PIN",
-    change: step === "enter" ? "Nuovo PIN a 6 cifre" : "Conferma il nuovo PIN",
+  // ── SCHERMATA SCELTA RUOLO ──
+  if (mode === "choose_role") {
+    return (
+      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+        alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
+        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+          border:"1px solid #1e293b",boxShadow:"0 0 60px #4ade8011"}}>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
+            <div style={{fontSize:11,color:"#475569",letterSpacing:1}}>CHI SEI?</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <button onClick={()=>onSuccess("admin")} style={{
+              background:"#0a1a0a",color:"#4ade80",border:"2px solid #166534",
+              borderRadius:12,padding:"18px 16px",fontSize:14,fontWeight:700,
+              cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
+              <div style={{fontSize:20,marginBottom:4}}>👔</div>
+              <div>Titolare / Admin</div>
+              <div style={{fontSize:11,color:"#4ade8088",fontWeight:400,marginTop:2}}>Accesso completo all'app</div>
+            </button>
+            <button onClick={()=>onSuccess("dipendente")} style={{
+              background:"#0a1020",color:"#60a5fa",border:"2px solid #1e3a5f",
+              borderRadius:12,padding:"18px 16px",fontSize:14,fontWeight:700,
+              cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
+              <div style={{fontSize:20,marginBottom:4}}>👤</div>
+              <div>Dipendente</div>
+              <div style={{fontSize:11,color:"#60a5fa88",fontWeight:400,marginTop:2}}>Solo inserimento presenze</div>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SCHERMATA RECOVERY ──
+  if (mode === "recovery") {
+    return (
+      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+        alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
+        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+          border:"1px solid #7c2d12",boxShadow:"0 0 60px #f9731611"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#f97316",marginBottom:8}}>🔑 RECUPERO ACCESSO</div>
+            <div style={{fontSize:11,color:"#64748b"}}>Inserisci il codice di emergenza che hai salvato al momento del setup</div>
+          </div>
+          <input type="text" value={recoveryInput} onChange={e=>setRecoveryInput(e.target.value.toUpperCase())}
+            placeholder="es. ABCD23-EFGH45-IJKL67-MNPQ89"
+            style={{width:"100%",background:"#080e1c",color:"#f97316",border:"1px solid #7c2d12",
+              borderRadius:8,padding:"12px 14px",fontSize:13,fontFamily:"inherit",
+              boxSizing:"border-box",letterSpacing:1,marginBottom:8}}/>
+          {error&&<div style={{color:"#f87171",fontSize:12,textAlign:"center",marginBottom:8}}>{error}</div>}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <button onClick={handleSubmit} disabled={recoveryInput.length<10}
+              style={{width:"100%",background:"#7c2d12",color:"#fed7aa",border:"1px solid #c2410c",
+                borderRadius:10,padding:13,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+                opacity:recoveryInput.length<10?0.5:1}}>
+              Reimposta accesso
+            </button>
+            {onCancel&&<button onClick={onCancel} style={{width:"100%",background:"transparent",color:"#475569",
+              border:"1px solid #1e293b",borderRadius:10,padding:11,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              Annulla
+            </button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SHOW RECOVERY CODE dopo setup ──
+  if (step === "show_recovery") {
+    return (
+      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+        alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
+        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+          border:"2px solid #f97316",boxShadow:"0 0 60px #f9731622"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
+            <div style={{fontSize:14,fontWeight:700,color:"#f97316",marginBottom:8}}>🔑 CODICE DI EMERGENZA</div>
+            <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.6}}>
+              <b style={{color:"#fbbf24"}}>SALVALO ORA</b> — screenshot, notes, carta.<br/>
+              Senza questo codice, se dimentichi il PIN admin non puoi più accedere.
+            </div>
+          </div>
+          <div style={{background:"#080e1c",border:"2px dashed #f97316",borderRadius:12,padding:"18px 14px",
+            textAlign:"center",marginBottom:20}}>
+            <div style={{fontSize:18,fontWeight:800,letterSpacing:3,color:"#fb923c",fontFamily:"monospace"}}>
+              {recoveryCode}
+            </div>
+          </div>
+          <button onClick={()=>{ setSession("admin"); onSuccess("admin"); }}
+            style={{width:"100%",background:"#14532d",color:"#4ade80",border:"1px solid #166534",
+              borderRadius:10,padding:14,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+            ✅ L'ho salvato — Entra
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── SCHERMATA PIN (unlock / setup / change) ──
+  const titleMap = {
+    unlock:       role==="dipendente" ? "👤 ACCESSO DIPENDENTE" : "🔐 ACCESSO ADMIN",
+    setup_admin:  "⚙️ IMPOSTA PIN ADMIN",
+    change_admin: "🔄 CAMBIA PIN ADMIN",
+    setup_dip:    "⚙️ IMPOSTA PIN DIPENDENTE",
+    change_dip:   "🔄 CAMBIA PIN DIPENDENTE",
+  };
+  const subMap = {
+    unlock:       role==="dipendente" ? "PIN a 4 cifre" : "PIN a 6 cifre",
+    setup_admin:  step==="enter" ? "Scegli un PIN a 6 cifre" : "Conferma PIN",
+    change_admin: step==="enter" ? "Nuovo PIN a 6 cifre" : "Conferma nuovo PIN",
+    setup_dip:    step==="enter" ? "Scegli un PIN a 4 cifre" : "Conferma PIN",
+    change_dip:   step==="enter" ? "Nuovo PIN a 4 cifre" : "Conferma nuovo PIN",
   };
 
+  const accentColor = role==="dipendente" ? "#60a5fa" : "#4ade80";
+  const borderColor = role==="dipendente" ? "#1e3a5f" : "#166534";
+  const bgColor     = role==="dipendente" ? "#0a1020" : "#14532d";
+
   return (
-    <div style={{
-      minHeight: "100vh", background: "#05090f", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono','Courier New',monospace", padding: 24
-    }}>
-      <div style={{
-        background: "#0d1526", borderRadius: 20, padding: "36px 32px 28px",
-        maxWidth: 380, width: "100%", border: "1px solid #1e293b",
-        boxShadow: "0 0 60px #4ade8011"
-      }}>
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 2, color: "#f8fafc", marginBottom: 4 }}>◈ CASSA PRO</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#4ade80", letterSpacing: 1.5, marginBottom: 8 }}>{titleMap[mode]}</div>
-          <div style={{ fontSize: 12, color: "#64748b" }}>{subtitleMap[isSetup ? mode : "unlock"]}</div>
-          {isSetup && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>{subtitleMap[mode]}</div>}
+    <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
+      <div style={{background:"#0d1526",borderRadius:20,padding:"36px 32px 28px",maxWidth:380,width:"100%",
+        border:`1px solid ${borderColor}`,boxShadow:`0 0 60px ${accentColor}11`}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
+          <div style={{fontSize:13,fontWeight:700,color:accentColor,letterSpacing:1.5,marginBottom:6}}>{titleMap[mode]}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>{subMap[mode]}</div>
         </div>
 
-        {isSetup ? (
-          step === "enter" ? (
-            <>
-              {renderDots(digits)}
-              {renderInputs(digits, setDigits, refs, true)}
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 11, color: "#94a3b8", textAlign: "center", marginBottom: 8 }}>Ripeti il PIN per confermare</div>
-              {renderDots(confirm)}
-              {renderInputs(confirm, setConfirm, confirmRefs, true)}
-            </>
-          )
-        ) : (
-          <>
-            {lockout > 0 && (
-              <div style={{ textAlign: "center", color: "#f87171", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
-                🔒 Bloccato — riprova tra {lockout}s
-              </div>
-            )}
-            {renderDots(digits)}
-            {renderInputs(digits, setDigits, refs, lockout === 0)}
-          </>
-        )}
+        {lockout>0&&<div style={{textAlign:"center",color:"#f87171",fontSize:13,fontWeight:700,marginBottom:12}}>
+          🔒 Bloccato — riprova tra {lockout}s
+        </div>}
 
-        {error && <div style={{ color: "#f87171", fontSize: 12, textAlign: "center", marginTop: 8, marginBottom: 4 }}>{error}</div>}
+        {step==="enter"
+          ? <>{renderDots(digits)}{renderInputs(digits,setDigits,refs,lockout===0)}</>
+          : <>{renderDots(confirm)}{renderInputs(confirm,setConfirm,confirmRefs,true)}</>
+        }
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 20 }}>
-          <button
-            onClick={handleSubmit}
-            disabled={lockout > 0 || (isSetup && step === "enter" ? pin.length < 6 : isSetup ? confirmPin.length < 6 : pin.length < 6)}
-            style={{
-              width: "100%", background: "#14532d", color: "#4ade80",
-              border: "1px solid #166534", borderRadius: 10, padding: 14,
-              fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-              opacity: (pin.length < 6 && !isSetup) || lockout > 0 ? 0.5 : 1,
-            }}>
-            {isSetup ? (step === "enter" ? "Continua →" : "✅ Salva PIN") : "Accedi"}
+        {error&&<div style={{color:"#f87171",fontSize:12,textAlign:"center",marginTop:8,marginBottom:4}}>{error}</div>}
+
+        <div style={{display:"flex",flexDirection:"column",gap:10,marginTop:20}}>
+          <button onClick={handleSubmit}
+            disabled={lockout>0||(step==="enter"?pin.length<LEN:confirmPin.length<LEN)}
+            style={{width:"100%",background:bgColor,color:accentColor,border:`1px solid ${borderColor}`,
+              borderRadius:10,padding:14,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+              opacity:((step==="enter"?pin.length:confirmPin.length)<LEN||lockout>0)?0.5:1}}>
+            {isSetup?(step==="enter"?"Continua →":"✅ Salva PIN"):"Accedi"}
           </button>
-          {onCancel && (
-            <button onClick={onCancel} style={{
-              width: "100%", background: "transparent", color: "#475569",
-              border: "1px solid #1e293b", borderRadius: 10, padding: 12,
-              fontSize: 12, cursor: "pointer", fontFamily: "inherit"
-            }}>Annulla</button>
+
+          {/* Recovery solo per admin unlock */}
+          {mode==="unlock"&&role!=="dipendente"&&getRecoveryHash()&&(
+            <button onClick={()=>onCancel("recovery")} style={{width:"100%",background:"transparent",
+              color:"#f97316",border:"1px solid #7c2d12",borderRadius:10,padding:11,
+              fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              🔑 Ho dimenticato il PIN
+            </button>
+          )}
+          {/* Dipendente dimentica PIN → contatta admin */}
+          {mode==="unlock"&&role==="dipendente"&&(
+            <div style={{textAlign:"center",fontSize:11,color:"#475569",marginTop:4}}>
+              PIN dimenticato? Chiedi al titolare di reimpostarlo.
+            </div>
+          )}
+          {onCancel&&typeof onCancel==="function"&&mode!=="unlock"&&(
+            <button onClick={()=>onCancel()} style={{width:"100%",background:"transparent",color:"#475569",
+              border:"1px solid #1e293b",borderRadius:10,padding:11,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              Annulla
+            </button>
           )}
         </div>
       </div>
@@ -341,6 +510,173 @@ const emptyAggiMese = () => {
   return obj;
 };
 
+// ── EXCEL EXPORT (SheetJS) ─────────────────────────────────
+const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
+  AGGI_BAR_VOCI, AGGI_TAB_VOCI, aggiLabel, mk, vk, pk, pgk }) => {
+  const XLSX = window.XLSX;
+  if (!XLSX) { alert("SheetJS non caricato. Ricarica la pagina e riprova."); return; }
+  const wb = XLSX.utils.book_new();
+
+  // ── Foglio 1: GIORNALIERO ──
+  const days = dim(year, month);
+  const headers = [
+    "Giorno","Data","Bar","Risto","POS Bar",
+    "Tab Venduto","Tab POS","Tab Rimasti",
+    "Art.Tabacchi",
+    "Gratta Venduto","Gratta Pagati","Gratta Rimasti",
+    "Lotto Venduto","Lotto Pagati","Lotto Rimasti",
+    "Scommesse","Virtual","LIS","SISAL","Valori",
+    "Dist. Prelievo",
+    "Slot Raccolto","Slot Monete","Slot Refill","Slot Netto",
+    "PF Oggi","PF Domani",
+    "Monete Oggi","Monete Domani",
+    "Debiti Oggi","Debiti Domani",
+    "Arrotondamento",
+    "Spese Contanti","Spese Elettronico",
+    "Movimento","Guadagno"
+  ];
+  const dayRows = Array.from({ length: days }, (_, i) => {
+    const d = i + 1;
+    const data = all[dk(year, month, d)] || emptyDay();
+    const c = calcDay(data);
+    const dateStr = `${String(d).padStart(2,"0")}/${String(month+1).padStart(2,"0")}/${year}`;
+    return [
+      d, dateStr,
+      n(data.bar), n(data.risto), n(data.pos_bar),
+      n(data.tab_venduto), n(data.tab_pos), c.tab_rim,
+      n(data.art_tabacchi),
+      n(data.gratta_venduto), n(data.gratta_pagati), c.gratta_rim,
+      n(data.lotto_venduto), n(data.lotto_pagati), c.lotto_rim,
+      n(data.toto), n(data.virtual), n(data.lis), n(data.sisal), n(data.valori),
+      n(data.dist_prelievo),
+      n(data.slot_raccolto), n(data.slot_monete), n(data.slot_refill),
+      n(data.slot_raccolto) + n(data.slot_monete) - n(data.slot_refill),
+      n(data.pf_oggi), n(data.pf_domani),
+      n(data.monete_oggi), n(data.monete_domani),
+      n(data.debiti_oggi), n(data.debiti_domani),
+      n(data.arrotondamento),
+      c.spese_cont, c.spese_ele,
+      c.movimento, c.guadagno
+    ];
+  });
+  // riga totali
+  const totRow = ["TOTALE", ""];
+  for (let col = 2; col < headers.length; col++) {
+    totRow.push(dayRows.reduce((s, r) => s + (typeof r[col] === "number" ? r[col] : 0), 0));
+  }
+  const ws1 = XLSX.utils.aoa_to_sheet([headers, ...dayRows, [], totRow]);
+  // larghezze colonne
+  ws1["!cols"] = headers.map((h, i) => ({ wch: i === 1 ? 12 : i === 0 ? 6 : 11 }));
+  XLSX.utils.book_append_sheet(wb, ws1, `${MONTHS[month]} ${year}`);
+
+  // ── Foglio 2: SPESE ──
+  const speseHeaders = ["Giorno","Data","Fornitore","Tipo","Contante €","Elettronico €","Nota"];
+  const speseRows = [];
+  for (let d = 1; d <= days; d++) {
+    const data = all[dk(year, month, d)];
+    if (!data?.spese?.length) continue;
+    const dateStr = `${String(d).padStart(2,"0")}/${String(month+1).padStart(2,"0")}/${year}`;
+    data.spese.forEach(sp => {
+      speseRows.push([d, dateStr, sp.dove||"", sp.tipo||"", n(sp.contante), n(sp.elettronico), sp.nota||""]);
+    });
+  }
+  const ws2 = XLSX.utils.aoa_to_sheet([speseHeaders, ...speseRows]);
+  ws2["!cols"] = [6,12,20,10,12,12,30].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws2, "Spese");
+
+  // ── Foglio 3: AGGI ──
+  const aggi = all[mk(year, month)] || {};
+  const aggiHeaders = ["Voce","Tipo","Periodo","Importo €"];
+  const aggiRows = [];
+  AGGI_BAR_VOCI.forEach(v => {
+    (aggi[v] || []).forEach(a => { if (n(a.importo)) aggiRows.push([aggiLabel(v), "Bar", a.periodo||"", n(a.importo)]); });
+  });
+  AGGI_TAB_VOCI.forEach(v => {
+    (aggi[v] || []).forEach(a => { if (n(a.importo)) aggiRows.push([aggiLabel(v), "Tabacchi", a.periodo||"", n(a.importo)]); });
+  });
+  const totAggiBar = AGGI_BAR_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
+  const totAggiTab = AGGI_TAB_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
+  aggiRows.push([], ["TOTALE BAR","","",totAggiBar], ["TOTALE TABACCHI","","",totAggiTab], ["TOTALE AGGI","","",totAggiBar+totAggiTab]);
+  const ws3 = XLSX.utils.aoa_to_sheet([aggiHeaders, ...aggiRows]);
+  ws3["!cols"] = [22,12,18,12].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws3, "Aggi");
+
+  // ── Foglio 4: VERSAMENTI ──
+  const versamenti = all[vk(year, month)] || [];
+  const vHeaders = ["#","Importo €","Data","Note"];
+  const vRows = versamenti.map((v, i) => [i+1, n(v.importo), v.data||"", v.nota||""]);
+  vRows.push([], ["TOTALE","",versamenti.reduce((s,v)=>s+n(v.importo),0),""]);
+  const ws4 = XLSX.utils.aoa_to_sheet([vHeaders, ...vRows]);
+  ws4["!cols"] = [4,12,14,30].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws4, "Versamenti");
+
+  // ── Foglio 5: PERSONALE ──
+  const personale = all[pk(year, month)] || { dipendenti: [], presenze: {} };
+  const persHeaders = ["Dipendente","Stipendio Base","Ore Contrattuali","Ore Lavorate","Paga Ordinaria","Straordinari","Anticipi","TOTALE DA PAGARE","Data Pagamento"];
+  const persRows = (personale.dipendenti || []).map((dip, idx) => {
+    const tariffa = n(dip.stipendio) / (n(dip.ore_mensili) || 1);
+    let oreTot = 0, straoTot = 0, anticipiTot = 0;
+    for (let d = 1; d <= days; d++) {
+      const presKey = `${idx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+      const p = (personale.presenze || {})[presKey] || {};
+      if (p.tipo === "lavoro" || !p.tipo) {
+        if (p.entrata && p.uscita) {
+          const [eh,em] = p.entrata.split(":").map(Number);
+          const [uh,um] = p.uscita.split(":").map(Number);
+          if (!isNaN(eh) && !isNaN(uh)) oreTot += Math.max(0, ((uh*60+um)-(eh*60+em))/60);
+        }
+      }
+      straoTot += n(p.straordinari);
+      anticipiTot += n(p.anticipo);
+    }
+    return [dip.nome||`Dip.#${idx+1}`, n(dip.stipendio), n(dip.ore_mensili), +oreTot.toFixed(2),
+      +(oreTot*tariffa).toFixed(2), +straoTot.toFixed(2), +anticipiTot.toFixed(2),
+      +(oreTot*tariffa+straoTot-anticipiTot).toFixed(2), dip.data_pagamento||""];
+  });
+  const ws5 = XLSX.utils.aoa_to_sheet([persHeaders, ...persRows]);
+  ws5["!cols"] = [18,14,16,14,14,14,10,18,16].map(wch => ({ wch }));
+  XLSX.utils.book_append_sheet(wb, ws5, "Personale");
+
+  // ── Foglio 6: RIEPILOGO MESE ──
+  const hasRealData = (d) => d && (n(d.bar)||n(d.risto)||n(d.tab_venduto)||n(d.art_tabacchi)||n(d.gratta_venduto)||n(d.lotto_venduto)||n(d.slot_raccolto)||n(d.dist_prelievo));
+  const movMensile = dayRows.reduce((s, r, i) => {
+    const d = all[dk(year, month, i+1)];
+    return s + (hasRealData(d) ? r[34] : 0); // col movimento
+  }, 0);
+  const mGuadagno = dayRows.reduce((s, r, i) => {
+    const d = all[dk(year, month, i+1)];
+    return s + (hasRealData(d) ? r[35] : 0); // col guadagno
+  }, 0);
+  const totVersati = versamenti.reduce((s,v)=>s+n(v.importo),0);
+  const totStipendi = persRows.reduce((s,r)=>s+r[7],0);
+  const totSpeseEl = dayRows.reduce((s,r)=>s+r[33],0);
+  const riepilogoData = [
+    ["RIEPILOGO", `${MONTHS[month].toUpperCase()} ${year}`],
+    [],
+    ["Movimento mese (contante)", movMensile],
+    ["Guadagno mese (bar+tab−spese)", mGuadagno],
+    [],
+    ["Aggi Bar", totAggiBar],
+    ["Aggi Tabacchi", totAggiTab],
+    ["Totale Aggi", totAggiBar + totAggiTab],
+    [],
+    ["Guadagno + Aggi", mGuadagno + totAggiBar + totAggiTab],
+    [],
+    ["Versato in banca/cassa", totVersati],
+    ["Spese elettronico", totSpeseEl],
+    [],
+    ["Stipendi dipendenti", totStipendi],
+    [],
+    ["CASSA NETTA STIMATA", mGuadagno + totAggiBar + totAggiTab - totStipendi - totSpeseEl],
+  ];
+  const ws6 = XLSX.utils.aoa_to_sheet(riepilogoData);
+  ws6["!cols"] = [{ wch: 30 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ws6, "Riepilogo Mese");
+
+  // download
+  XLSX.writeFile(wb, `CassaPro_${MONTHS[month]}_${year}.xlsx`);
+};
+
 function calcDay(t) {
   if (!t) return { tab_rim:0,gratta_rim:0,lotto_rim:0,spese_cont:0,spese_ele:0,pf_diff:0,monete_diff:0,debiti_diff:0,movimento:0,guadagno:0 };
   const tab_rim = n(t.tab_venduto) - n(t.tab_pos);
@@ -409,17 +745,186 @@ const TABS = [
   {id:"aggi",label:"📑 Aggi"},
   {id:"personale",label:"👥 Personale"},
   {id:"pagamenti",label:"💳 Pagamenti"},
+  {id:"annuale",label:"📅 Annuale"},
   {id:"riepilogo",label:"📊 Totali"},
 ];
+
+// ── VISTA DIPENDENTE ───────────────────────────────────────
+function DipendentView({ all, year, month, day, setYear, setMonth, setDay, personale, onSave, onLock, MONTHS, dim, dk }) {
+  const [selDip, setSelDip] = useState(null);
+  const [flash, setFlash] = useState(false);
+  const days = dim(year, month);
+
+  const save = (updated) => { onSave(updated); setFlash(true); setTimeout(()=>setFlash(false),1200); };
+
+  const presKey = (dipIdx, d) => `${dipIdx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+  const getP = (dipIdx, d) => (personale.presenze||{})[presKey(dipIdx,d)] || { entrata:"", uscita:"", tipo:"lavoro", straordinari:"", anticipo:"", nota:"" };
+  const updP = (dipIdx, d, f, v) => {
+    const k = presKey(dipIdx,d);
+    const presenze = {...(personale.presenze||{}), [k]: {...getP(dipIdx,d), [f]: v}};
+    save({...personale, presenze});
+  };
+  const calcOre = (e,u) => {
+    if (!e||!u) return 0;
+    const [eh,em]=e.split(":").map(Number), [uh,um]=u.split(":").map(Number);
+    if(isNaN(eh)||isNaN(uh)) return 0;
+    return Math.max(0,((uh*60+um)-(eh*60+em))/60);
+  };
+  const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
+  const TIPO_IT    = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(180deg,#0a1520 0%,#05090f 100%)",padding:"18px 16px 12px",
+        position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e3a5f"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,letterSpacing:2,color:"#60a5fa"}}>◈ CASSA PRO</div>
+            <div style={{fontSize:10,color:"#1e3a5f",letterSpacing:1}}>AREA DIPENDENTE</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {flash&&<span style={{background:"#0a1a2a",color:"#60a5fa",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            <button onClick={onLock} style={{background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",
+              padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              🔒 Esci
+            </button>
+          </div>
+        </div>
+        {/* Selettori mese/giorno */}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          {[
+            {val:year,set:setYear,opts:[2024,2025,2026].map(y=>({v:y,l:y}))},
+            {val:month,set:setMonth,opts:MONTHS.map((m,i)=>({v:i,l:m}))},
+            {val:day,set:setDay,opts:Array.from({length:days},(_,i)=>({v:i+1,l:i+1}))},
+          ].map((s,i)=>(
+            <select key={i} value={s.val} onChange={e=>s.set(+e.target.value)}
+              style={{flex:1,background:"#0d1526",color:"#e2e8f0",border:"1px solid #1e3a5f",
+                padding:"7px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit"}}>
+              {s.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:16}}>
+        {/* Seleziona dipendente */}
+        {selDip===null&&<>
+          <div style={{fontSize:12,color:"#475569",marginBottom:14}}>Seleziona il tuo nome:</div>
+          {(personale.dipendenti||[]).length===0&&(
+            <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>
+              Nessun dipendente registrato.<br/>Chiedi al titolare di aggiungere i dipendenti.
+            </div>
+          )}
+          {(personale.dipendenti||[]).map((dip,i)=>(
+            <div key={i} onClick={()=>setSelDip(i)}
+              style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:16,
+                marginBottom:10,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{dip.nome||`Dipendente #${i+1}`}</div>
+              <div style={{fontSize:20,color:"#334155"}}>›</div>
+            </div>
+          ))}
+        </>}
+
+        {/* Presenze del giorno */}
+        {selDip!==null&&(()=>{
+          const dip = (personale.dipendenti||[])[selDip];
+          if (!dip) { setSelDip(null); return null; }
+          const p = getP(selDip, day);
+          const ore = calcOre(p.entrata, p.uscita);
+          const dateStr = `${String(day).padStart(2,"0")}/${String(month+1).padStart(2,"0")}/${year}`;
+          return (<>
+            <button onClick={()=>setSelDip(null)} style={{background:"#1e293b",color:"#e2e8f0",border:"none",
+              borderRadius:8,padding:"8px 14px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700,marginBottom:16}}>
+              ← Torna
+            </button>
+            <div style={{background:"#0f1923",borderRadius:14,borderLeft:"4px solid #60a5fa",padding:16,marginBottom:14}}>
+              <div style={{fontSize:11,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:4}}>
+                {dip.nome} — {dateStr}
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
+                <select value={p.tipo||"lavoro"} onChange={e=>updP(selDip,day,"tipo",e.target.value)}
+                  style={{width:"100%",background:"#080e1c",color:TIPO_COLOR[p.tipo||"lavoro"],
+                    border:"1px solid #1e293b",padding:"10px 12px",borderRadius:8,fontSize:13,fontFamily:"inherit",fontWeight:700}}>
+                  {Object.entries(TIPO_IT).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              {(p.tipo==="lavoro"||!p.tipo)&&<>
+                <div style={{display:"flex",gap:10,marginBottom:10}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ENTRATA</div>
+                    <input type="text" value={p.entrata||""} onChange={e=>updP(selDip,day,"entrata",e.target.value)}
+                      placeholder="08:00"
+                      style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
+                        borderRadius:7,padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>USCITA</div>
+                    <input type="text" value={p.uscita||""} onChange={e=>updP(selDip,day,"uscita",e.target.value)}
+                      placeholder="16:00"
+                      style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
+                        borderRadius:7,padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ORE</div>
+                    <div style={{background:"#080e1c",border:"1px solid #1e293b",borderRadius:7,padding:"10px",
+                      fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>{ore.toFixed(1)}h</div>
+                  </div>
+                </div>
+              </>}
+              <div>
+                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>NOTE</div>
+                <input type="text" value={p.nota||""} onChange={e=>updP(selDip,day,"nota",e.target.value)}
+                  placeholder="Note..."
+                  style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",
+                    borderRadius:7,padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+
+            {/* Riepilogo settimana */}
+            <div style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
+              <div style={{fontSize:11,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:10}}>
+                QUESTO MESE — {MONTHS[month]}
+              </div>
+              {Array.from({length:days},(_,gi)=>{
+                const d=gi+1, pp=getP(selDip,d);
+                const oo=calcOre(pp.entrata,pp.uscita);
+                const has=pp.entrata||pp.uscita||pp.tipo==="malattia"||pp.tipo==="ferie"||pp.tipo==="permesso"||pp.tipo==="assenza";
+                if(!has) return null;
+                const wd=new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
+                return (
+                  <div key={d} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",
+                    borderBottom:"1px solid #080e1c",fontSize:12}}>
+                    <span style={{color:"#64748b"}}>{wd} {d}</span>
+                    <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
+                      {pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
+                      {pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>);
+        })()}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const now = new Date();
   const [all, setAll] = useState(load);
 
-  // ── PIN STATE ──
-  const [pinUnlocked, setPinUnlocked] = useState(() => !getPINHash() || isSessionUnlocked());
-  const [pinMode, setPinMode] = useState(null); // null | "setup" | "change"
-  const hasPIN = !!getPINHash();
+  // ── PIN STATE v2 ──
+  const [pinScreen, setPinScreen] = useState(() => {
+    const session = getSession();
+    if (session) return null; // già loggato
+    if (!hasAdminPIN()) return null; // nessun PIN impostato → accesso libero
+    return "choose_role"; // mostra scelta ruolo
+  });
+  const [currentRole, setCurrentRole] = useState(() => getSession() || (hasAdminPIN() ? null : "admin"));
+  const [pinMode, setPinMode] = useState(null); // per setup/change da settings
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -430,10 +935,11 @@ export default function App() {
   const [month, setMonth] = useState(now.getMonth());
   const [day, setDay] = useState(now.getDate());
   const [tab, setTab] = useState("incassi");
-  const [view, setView] = useState("day");
+  const [view, setView] = useState("day"); // "day" | "month" | "annual"
   const [flash, setFlash] = useState(false);
   const [selDip, setSelDip] = useState(null);
-  const [driveStatus, setDriveStatus] = useState(""); // "", "syncing", "ok", "error"
+  const [driveStatus, setDriveStatus] = useState("");
+  const [notaOpen, setNotaOpen] = useState(false);
 
   const handleDriveSave = async () => {
     setDriveStatus("syncing");
@@ -654,11 +1160,46 @@ export default function App() {
   const mGuadagno = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
 
   // ── PIN: early returns ──
-  if (!pinUnlocked) {
-    return <PINScreen mode="unlock" onSuccess={() => { setSessionUnlocked(); setPinUnlocked(true); }} />;
+  if (pinScreen === "choose_role") {
+    return <PINScreen mode="choose_role" onSuccess={(role) => {
+      if (role === "admin") {
+        if (hasAdminPIN()) setPinScreen("unlock_admin");
+        else { setCurrentRole("admin"); setPinScreen(null); }
+      } else {
+        if (hasDipPIN()) setPinScreen("unlock_dip");
+        else { alert("Il PIN dipendente non è ancora impostato. Chiedi al titolare."); setPinScreen("choose_role"); }
+      }
+    }}/>;
   }
-  if (pinUnlocked && pinMode) {
-    return <PINScreen mode={pinMode} onSuccess={() => setPinMode(null)} onCancel={() => setPinMode(null)} />;
+  if (pinScreen === "unlock_admin") {
+    return <PINScreen mode="unlock" role="admin"
+      onSuccess={() => { setCurrentRole("admin"); setSession("admin"); setPinScreen(null); }}
+      onCancel={(type) => { if(type==="recovery") setPinScreen("recovery"); }}/>;
+  }
+  if (pinScreen === "unlock_dip") {
+    return <PINScreen mode="unlock" role="dipendente"
+      onSuccess={() => { setCurrentRole("dipendente"); setSession("dipendente"); setPinScreen(null); }}
+      onCancel={null}/>;
+  }
+  if (pinScreen === "recovery") {
+    return <PINScreen mode="recovery"
+      onSuccess={() => { setCurrentRole("admin"); setPinScreen(null); }}
+      onCancel={() => setPinScreen("unlock_admin")}/>;
+  }
+  if (pinMode) {
+    return <PINScreen mode={pinMode} role={pinMode.includes("dip")?"dipendente":"admin"}
+      onSuccess={() => setPinMode(null)}
+      onCancel={() => setPinMode(null)}/>;
+  }
+
+  // Vista dipendente — solo presenze
+  if (currentRole === "dipendente") {
+    return <DipendentView all={all} year={year} month={month} day={day}
+      setYear={setYear} setMonth={setMonth} setDay={setDay}
+      personale={all[pk(year,month)]||{dipendenti:[],presenze:{}}}
+      onSave={(updated) => { const u={...all,[pk(year,month)]:updated}; setAll(u); persist(u); }}
+      onLock={() => { clearSession(); setCurrentRole(null); setPinScreen("choose_role"); }}
+      MONTHS={MONTHS} dim={dim} dk={dk}/>;
   }
 
   return (
@@ -675,20 +1216,20 @@ export default function App() {
             {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
             {/* Pulsante lock */}
             <button
-              onClick={() => hasPIN ? (lockSession(), setPinUnlocked(false)) : setPinMode("setup")}
-              title={hasPIN ? "Blocca app" : "Imposta PIN"}
-              style={{background:"#1e293b",color: hasPIN ? "#fbbf24" : "#475569",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
-              {hasPIN ? "🔒" : "🔓"}
+              onClick={() => { clearSession(); setCurrentRole(null); setPinScreen(hasAdminPIN() ? "choose_role" : null); }}
+              title={hasAdminPIN() ? "Blocca app" : "Imposta PIN"}
+              style={{background:"#1e293b",color: hasAdminPIN() ? "#fbbf24" : "#475569",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              {hasAdminPIN() ? "🔒" : "🔓"}
             </button>
-            <button onClick={()=>setView(v=>v==="day"?"month":"day")}
+            <button onClick={()=>setView(v=>v==="day"?"month":v==="month"?"annual":"day")}
               style={{background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
-              {view==="day"?"MESE ▸":"◂ GIORNO"}
+              {view==="day"?"MESE ▸":view==="month"?"ANNO ▸":"◂ GIORNO"}
             </button>
           </div>
         </div>
         <div style={{display:"flex",gap:8}}>
           {[
-            {val:year,set:setYear,opts:[2023,2024,2025,2026].map(y=>({v:y,l:y}))},
+            {val:year,set:setYear,opts:Array.from({length:new Date().getFullYear()-2023+3},(_,i)=>({v:2023+i,l:2023+i}))},
             {val:month,set:setMonth,opts:MONTHS.map((m,i)=>({v:i,l:m}))},
             ...(view==="day"?[{val:day,set:setDay,opts:Array.from({length:days},(_,i)=>({v:i+1,l:i+1}))}]:[]),
           ].map((s,i)=>(
@@ -753,6 +1294,120 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* ── VISTA ANNUALE ── */}
+      {view==="annual"&&(()=>{
+        const annualData = MONTHS.map((mName, mi) => {
+          const mDays = dim(year, mi);
+          let mov=0, guad=0, versato=0, aggiBar=0, aggiTab=0;
+          for (let d=1; d<=mDays; d++) {
+            const dd = all[dk(year,mi,d)];
+            if (hasRealData(dd)) { const c=calcDay(dd); mov+=c.movimento; guad+=c.guadagno; }
+          }
+          const vers = all[vk(year,mi)]||[];
+          versato = vers.reduce((s,v)=>s+n(v.importo),0);
+          const aggi = all[mk(year,mi)]||{};
+          aggiBar = AGGI_BAR_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
+          aggiTab = AGGI_TAB_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
+          const hasData = mov!==0||guad!==0;
+          return { mName, mi, mov, guad, versato, aggi:aggiBar+aggiTab, hasData };
+        });
+        const totMov   = annualData.reduce((s,m)=>s+m.mov,0);
+        const totGuad  = annualData.reduce((s,m)=>s+m.guad,0);
+        const totVers  = annualData.reduce((s,m)=>s+m.versato,0);
+        const totAggiA = annualData.reduce((s,m)=>s+m.aggi,0);
+        // scala per grafico
+        const maxMov  = Math.max(...annualData.map(m=>Math.abs(m.mov)),1);
+        const maxGuad = Math.max(...annualData.map(m=>Math.abs(m.guad)),1);
+        return (
+          <div style={{padding:16}}>
+            <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>📅 Anno {year}</div>
+            <div style={{fontSize:11,color:"#475569",marginBottom:16}}>Riepilogo tutti i mesi</div>
+
+            {/* KPI annuali */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:20}}>
+              <Stat label="Movimento anno" val={eur(totMov)} accent="#4ade80" big/>
+              <Stat label="Guadagno anno" val={eur(totGuad)} accent={totGuad>=0?"#60a5fa":"#f87171"} big/>
+              <Stat label="Aggi anno" val={eur(totAggiA)} accent="#fbbf24"/>
+              <Stat label="Guad.+Aggi" val={eur(totGuad+totAggiA)} accent={totGuad+totAggiA>=0?"#4ade80":"#f87171"} big/>
+              <Stat label="Versato anno" val={eur(totVers)} accent="#f87171"/>
+            </div>
+
+            {/* Grafico a barre — Movimento */}
+            <div style={{background:"#0f1923",borderRadius:12,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#4ade80",letterSpacing:1,marginBottom:12}}>📊 MOVIMENTO MENSILE</div>
+              {annualData.map(({mName,mi,mov,hasData})=>(
+                <div key={mi} onClick={()=>{setMonth(mi);setView("month");}}
+                  style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer"}}>
+                  <div style={{width:30,fontSize:10,color:"#475569",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
+                  <div style={{flex:1,background:"#080e1c",borderRadius:4,height:20,overflow:"hidden"}}>
+                    {hasData&&<div style={{width:`${Math.min(100,Math.abs(mov)/maxMov*100)}%`,height:"100%",
+                      background:mov>=0?"#4ade80":"#f87171",borderRadius:4,
+                      transition:"width 0.3s",minWidth:2}}/>}
+                  </div>
+                  <div style={{width:80,textAlign:"right",fontSize:11,fontWeight:700,
+                    color:hasData?(mov>=0?"#4ade80":"#f87171"):"#334155",flexShrink:0}}>
+                    {hasData?eur(mov):"—"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Grafico a barre — Guadagno */}
+            <div style={{background:"#0f1923",borderRadius:12,padding:14,marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#60a5fa",letterSpacing:1,marginBottom:12}}>📊 GUADAGNO MENSILE</div>
+              {annualData.map(({mName,mi,guad,aggi,hasData})=>(
+                <div key={mi} onClick={()=>{setMonth(mi);setView("month");}}
+                  style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer"}}>
+                  <div style={{width:30,fontSize:10,color:"#475569",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
+                  <div style={{flex:1,background:"#080e1c",borderRadius:4,height:20,overflow:"hidden",position:"relative"}}>
+                    {hasData&&<>
+                      <div style={{width:`${Math.min(100,Math.abs(guad)/maxGuad*100)}%`,height:"100%",
+                        background:"#60a5fa44",borderRadius:4,position:"absolute"}}/>
+                      <div style={{width:`${Math.min(100,Math.abs(guad+aggi)/maxGuad*100)}%`,height:"60%",
+                        background:"#4ade8077",borderRadius:4,position:"absolute",top:"20%"}}/>
+                    </>}
+                  </div>
+                  <div style={{width:80,textAlign:"right",fontSize:11,fontWeight:700,
+                    color:hasData?(guad>=0?"#60a5fa":"#f87171"):"#334155",flexShrink:0}}>
+                    {hasData?eur(guad+aggi):"—"}
+                  </div>
+                </div>
+              ))}
+              <div style={{fontSize:10,color:"#334155",marginTop:6}}>🟦 guadagno · 🟩 guadagno+aggi</div>
+            </div>
+
+            {/* Tabella riepilogo mensile */}
+            <div style={{background:"#0f1923",borderRadius:12,overflow:"hidden",marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
+                padding:"10px 12px",background:"#080e1c",fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1,gap:4}}>
+                <span>MESE</span><span>MOV.</span><span>GUAD.</span><span>AGGI</span><span>VERSATO</span>
+              </div>
+              {annualData.map(({mName,mi,mov,guad,versato,aggi,hasData})=>(
+                <div key={mi} onClick={()=>{setMonth(mi);setView("month");}}
+                  style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
+                    padding:"10px 12px",fontSize:11,borderBottom:"1px solid #080e1c",
+                    gap:4,cursor:"pointer",opacity:hasData?1:0.3}}>
+                  <span style={{color:"#64748b",fontWeight:800}}>{mName.slice(0,3)}</span>
+                  <span style={{color:"#4ade80"}}>{hasData?eur(mov):"—"}</span>
+                  <span style={{color:hasData?(guad>=0?"#60a5fa":"#f87171"):"#475569",fontWeight:700}}>{hasData?eur(guad):"—"}</span>
+                  <span style={{color:"#fbbf24"}}>{hasData&&aggi?eur(aggi):"—"}</span>
+                  <span style={{color:"#f87171"}}>{versato?eur(versato):"—"}</span>
+                </div>
+              ))}
+              <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
+                padding:"10px 12px",fontSize:11,gap:4,background:"#080e1c",fontWeight:800}}>
+                <span style={{color:"#e2e8f0"}}>TOT</span>
+                <span style={{color:"#4ade80"}}>{eur(totMov)}</span>
+                <span style={{color:totGuad>=0?"#60a5fa":"#f87171"}}>{eur(totGuad)}</span>
+                <span style={{color:"#fbbf24"}}>{eur(totAggiA)}</span>
+                <span style={{color:"#f87171"}}>{eur(totVers)}</span>
+              </div>
+            </div>
+            <div style={{fontSize:11,color:"#334155",textAlign:"center"}}>Clicca su un mese per aprirlo</div>
+          </div>
+        );
+      })()}
 
       {/* ── VISTA GIORNO ── */}
       {view==="day"&&(
@@ -1130,6 +1785,174 @@ export default function App() {
               })}
             </>}
 
+            </>}
+
+            {/* ── RIEPILOGO ANNUALE ── */}
+            {tab==="annuale"&&(()=>{
+              // Calcola dati per ogni mese dell'anno selezionato
+              const annualData = MONTHS.map((mName, m) => {
+                const mDays = dim(year, m);
+                const mVers = all[vk(year,m)] || [];
+                const mAggi = all[mk(year,m)] || {};
+                const totVers = mVers.reduce((s,v)=>s+n(v.importo),0);
+                const totAggiBarM = AGGI_BAR_VOCI.reduce((s,v)=>s+(mAggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),0),0);
+                const totAggiTabM = AGGI_TAB_VOCI.reduce((s,v)=>s+(mAggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),0),0);
+                const totAggiM = totAggiBarM + totAggiTabM;
+                let movM=0, guadM=0, speseContM=0, speseEleM=0, hasAny=false;
+                for(let d=1;d<=mDays;d++){
+                  const dd=all[dk(year,m,d)];
+                  if(!dd) continue;
+                  const hasReal = n(dd.bar)||n(dd.risto)||n(dd.tab_venduto)||n(dd.art_tabacchi)||n(dd.gratta_venduto)||n(dd.lotto_venduto)||n(dd.slot_raccolto)||n(dd.dist_prelievo);
+                  if(!hasReal) continue;
+                  hasAny=true;
+                  const c=calcDay(dd);
+                  movM+=c.movimento; guadM+=c.guadagno;
+                  speseContM+=c.spese_cont; speseEleM+=c.spese_ele;
+                }
+                return { mName, m, movM, guadM, totAggiM, totAggiBarM, totAggiTabM,
+                  guadConAggi: guadM+totAggiM, totVers, speseContM, speseEleM, hasAny };
+              });
+
+              const totAnno = annualData.reduce((acc,r)=>({
+                movM: acc.movM+r.movM, guadM: acc.guadM+r.guadM,
+                totAggiM: acc.totAggiM+r.totAggiM, guadConAggi: acc.guadConAggi+r.guadConAggi,
+                totVers: acc.totVers+r.totVers, speseContM: acc.speseContM+r.speseContM,
+                speseEleM: acc.speseEleM+r.speseEleM,
+              }), {movM:0,guadM:0,totAggiM:0,guadConAggi:0,totVers:0,speseContM:0,speseEleM:0});
+
+              // Scala per barre
+              const maxGuad = Math.max(...annualData.map(r=>Math.abs(r.guadConAggi)), 1);
+              const maxMov  = Math.max(...annualData.map(r=>Math.abs(r.movM)), 1);
+
+              return (<>
+                <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>ANNO {year}</div>
+
+                {/* KPI annuali */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:20}}>
+                  <Stat label="Movimento anno" val={eur(totAnno.movM)} accent="#4ade80" big/>
+                  <Stat label="Guadagno anno" val={eur(totAnno.guadM)} accent="#60a5fa" big/>
+                  <Stat label="Aggi anno" val={eur(totAnno.totAggiM)} accent="#fbbf24"/>
+                  <Stat label="Guadagno + Aggi" val={eur(totAnno.guadConAggi)} accent={totAnno.guadConAggi>=0?"#a78bfa":"#f87171"} big/>
+                  <Stat label="Versato anno" val={eur(totAnno.totVers)} accent="#f87171"/>
+                  <Stat label="Spese contanti" val={eur(totAnno.speseContM)} accent="#fb923c"/>
+                  <Stat label="Spese elettronico" val={eur(totAnno.speseEleM)} accent="#fb923c"/>
+                </div>
+
+                {/* Grafico a barre — Guadagno + Aggi per mese */}
+                <Block title="Guadagno + Aggi per Mese" accent="#a78bfa">
+                  {annualData.map(r=>{
+                    if(!r.hasAny) return (
+                      <div key={r.m} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <div style={{width:32,fontSize:10,color:"#334155",fontWeight:700,flexShrink:0}}>{r.mName.slice(0,3)}</div>
+                        <div style={{fontSize:10,color:"#1e293b"}}>—</div>
+                      </div>
+                    );
+                    const pct = Math.abs(r.guadConAggi)/maxGuad*100;
+                    const pos = r.guadConAggi >= 0;
+                    return (
+                      <div key={r.m} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
+                          <span style={{fontSize:11,fontWeight:800,color:pos?"#a78bfa":"#f87171"}}>{eur(r.guadConAggi)}</span>
+                        </div>
+                        <div style={{background:"#080e1c",borderRadius:4,height:10,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:pos?"linear-gradient(90deg,#7c3aed,#a78bfa)":"#f87171",borderRadius:4,transition:"width 0.3s"}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Block>
+
+                {/* Grafico a barre — Movimento */}
+                <Block title="Movimento Contante per Mese" accent="#4ade80">
+                  {annualData.map(r=>{
+                    if(!r.hasAny) return (
+                      <div key={r.m} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <div style={{width:32,fontSize:10,color:"#334155",fontWeight:700,flexShrink:0}}>{r.mName.slice(0,3)}</div>
+                        <div style={{fontSize:10,color:"#1e293b"}}>—</div>
+                      </div>
+                    );
+                    const pct = Math.abs(r.movM)/maxMov*100;
+                    return (
+                      <div key={r.m} style={{marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
+                          <span style={{fontSize:11,fontWeight:800,color:"#4ade80"}}>{eur(r.movM)}</span>
+                        </div>
+                        <div style={{background:"#080e1c",borderRadius:4,height:10,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,#166534,#4ade80)",borderRadius:4,transition:"width 0.3s"}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </Block>
+
+                {/* Tabella mensile dettagliata */}
+                <Block title="Dettaglio Mese per Mese" accent="#60a5fa">
+                  {/* header */}
+                  <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,marginBottom:8,
+                    fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1}}>
+                    <span>MESE</span><span style={{textAlign:"right"}}>MOVIMENTO</span>
+                    <span style={{textAlign:"right"}}>GUAD.+AGGI</span><span style={{textAlign:"right"}}>VERSATO</span>
+                  </div>
+                  {annualData.map(r=>(
+                    <div key={r.m}
+                      onClick={()=>{ setMonth(r.m); setTab("riepilogo"); }}
+                      style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,
+                        padding:"8px 0",borderBottom:"1px solid #080e1c",cursor:"pointer",
+                        opacity:r.hasAny?1:0.3}}>
+                      <span style={{fontSize:11,fontWeight:800,color: month===r.m?"#60a5fa":"#94a3b8"}}>{r.mName.slice(0,3)}</span>
+                      <span style={{fontSize:11,color:"#4ade80",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.hasAny?eur(r.movM):"—"}</span>
+                      <span style={{fontSize:11,fontWeight:700,color:r.guadConAggi>=0?"#a78bfa":"#f87171",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.hasAny?eur(r.guadConAggi):"—"}</span>
+                      <span style={{fontSize:11,color:"#f87171",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.totVers>0?eur(r.totVers):"—"}</span>
+                    </div>
+                  ))}
+                  {/* riga totale */}
+                  <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,
+                    padding:"10px 0",fontSize:12,fontWeight:800,marginTop:4}}>
+                    <span style={{color:"#e2e8f0"}}>TOTALE</span>
+                    <span style={{color:"#4ade80",textAlign:"right"}}>{eur(totAnno.movM)}</span>
+                    <span style={{color:totAnno.guadConAggi>=0?"#a78bfa":"#f87171",textAlign:"right"}}>{eur(totAnno.guadConAggi)}</span>
+                    <span style={{color:"#f87171",textAlign:"right"}}>{eur(totAnno.totVers)}</span>
+                  </div>
+                </Block>
+
+                {/* Confronto mese corrente vs stesso mese anno precedente */}
+                {(()=>{
+                  const prevYear2 = year - 1;
+                  const mDays2 = dim(prevYear2, month);
+                  let movPrev=0, guadPrev=0, hasAnyPrev=false;
+                  const mAggiPrev = all[mk(prevYear2,month)] || {};
+                  const totAggiPrev = [...AGGI_BAR_VOCI,...AGGI_TAB_VOCI].reduce((s,v)=>s+(mAggiPrev[v]||[]).reduce((ss,a)=>ss+n(a.importo),0),0);
+                  for(let d=1;d<=mDays2;d++){
+                    const dd=all[dk(prevYear2,month,d)];
+                    if(!dd) continue;
+                    const hasReal=n(dd.bar)||n(dd.risto)||n(dd.tab_venduto)||n(dd.art_tabacchi)||n(dd.gratta_venduto)||n(dd.lotto_venduto)||n(dd.slot_raccolto)||n(dd.dist_prelievo);
+                    if(!hasReal) continue;
+                    hasAnyPrev=true;
+                    const c=calcDay(dd);
+                    movPrev+=c.movimento; guadPrev+=c.guadagno;
+                  }
+                  if(!hasAnyPrev) return null;
+                  const curMonth = annualData[month];
+                  const diffGuad = curMonth.guadConAggi - (guadPrev+totAggiPrev);
+                  const diffMov  = curMonth.movM - movPrev;
+                  return (
+                    <Block title={`${MONTHS[month]} ${year} vs ${MONTHS[month]} ${prevYear2}`} accent="#fbbf24">
+                      <RRow label={`Movimento ${year}`} val={eur(curMonth.movM)} color="#4ade80"/>
+                      <RRow label={`Movimento ${prevYear2}`} val={eur(movPrev)} color="#64748b"/>
+                      <RRow label="Differenza movimento" val={eur(diffMov,true)} color={diffMov>=0?"#4ade80":"#f87171"} bold/>
+                      <div style={{height:8}}/>
+                      <RRow label={`Guad.+Aggi ${year}`} val={eur(curMonth.guadConAggi)} color="#a78bfa"/>
+                      <RRow label={`Guad.+Aggi ${prevYear2}`} val={eur(guadPrev+totAggiPrev)} color="#64748b"/>
+                      <RRow label="Differenza guadagno" val={eur(diffGuad,true)} color={diffGuad>=0?"#4ade80":"#f87171"} bold/>
+                    </Block>
+                  );
+                })()}
+
+              </>);
+            })()}
+
             {/* ── RIEPILOGO ── */}
             {tab==="riepilogo"&&<>
               <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>GIORNO {day} — {MONTHS[month].toUpperCase()} {year}</div>
@@ -1198,26 +2021,57 @@ export default function App() {
               {/* PIN MANAGEMENT */}
               <div style={{background:"#0f1923",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e293b"}}>
                 <div style={{fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:1,marginBottom:10}}>🔐 SICUREZZA PIN</div>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>
-                  {hasPIN ? "PIN attivo — l'app è protetta all'avvio." : "Nessun PIN impostato — l'app è accessibile senza protezione."}
-                </div>
-                <div style={{display:"flex",gap:8}}>
-                  {!hasPIN ? (
-                    <button onClick={()=>setPinMode("setup")} style={{flex:1,background:"#1a1400",color:"#fbbf24",border:"1px solid #713f12",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                      🔒 Imposta PIN
-                    </button>
-                  ) : (
-                    <>
-                      <button onClick={()=>setPinMode("change")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                        🔄 Cambia PIN
+
+                {/* PIN ADMIN */}
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:6}}>
+                    👔 PIN Admin (6 cifre) — {hasAdminPIN() ? "✅ attivo" : "❌ non impostato"}
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    {!hasAdminPIN() ? (
+                      <button onClick={()=>setPinMode("setup_admin")} style={{flex:1,background:"#1a1400",color:"#fbbf24",border:"1px solid #713f12",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        🔒 Imposta PIN Admin
                       </button>
-                      <button onClick={()=>{ if(window.confirm("Rimuovere il PIN? L'app non sarà più protetta.")) { removePIN(); setPinUnlocked(true); } }}
-                        style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                        ✕ Rimuovi PIN
-                      </button>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <button onClick={()=>setPinMode("change_admin")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          🔄 Cambia
+                        </button>
+                        <button onClick={()=>{ if(window.confirm("Rimuovere il PIN admin? L'app non sarà più protetta.")) { removeAdminPIN(); setCurrentRole("admin"); }}}
+                          style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          ✕ Rimuovi
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
+
+                {/* PIN DIPENDENTE */}
+                {hasAdminPIN()&&<div style={{borderTop:"1px solid #1e293b",paddingTop:10}}>
+                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:6}}>
+                    👤 PIN Dipendente (4 cifre) — {hasDipPIN() ? "✅ attivo" : "❌ non impostato"}
+                  </div>
+                  <div style={{fontSize:10,color:"#475569",marginBottom:8,lineHeight:1.5}}>
+                    Il dipendente accede solo alla sezione Presenze.
+                  </div>
+                  <div style={{display:"flex",gap:8}}>
+                    {!hasDipPIN() ? (
+                      <button onClick={()=>setPinMode("setup_dip")} style={{flex:1,background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        🔒 Imposta PIN Dipendente
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={()=>setPinMode("change_dip")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          🔄 Cambia
+                        </button>
+                        <button onClick={()=>{ if(window.confirm("Rimuovere il PIN dipendente?")) removeDipPIN(); }}
+                          style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                          ✕ Rimuovi
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>}
               </div>
 
               <button onClick={()=>{
@@ -1231,24 +2085,11 @@ export default function App() {
                 💾 Backup completo (JSON)
               </button>
 
-              <button onClick={()=>{
-                const headers = ["Giorno","Bar","Risto","POS Bar","Tab Venduto","Tab POS","Tab Rimasti","Gratta Venduto","Gratta Pagati","Gratta Rimasti","Lotto Venduto","Lotto Pagati","Lotto Rimasti","Scommesse","Virtual","LIS","SISAL","Valori","Dist. Prelievo","Slot Raccolto","Slot Monete","Slot Refill","PF Oggi","PF Domani","Monete Oggi","Monete Domani","Debiti Oggi","Debiti Domani","Arrotondamento","Spese Contanti","Spese Elettronico","Movimento","Guadagno"];
-                const rows = Array.from({length:dim(year,month)},(_,i)=>{
-                  const d = all[dk(year,month,i+1)] || emptyDay();
-                  const c = calcDay(d);
-                  return [i+1,n(d.bar),n(d.risto),n(d.pos_bar),n(d.tab_venduto),n(d.tab_pos),c.tab_rim,n(d.gratta_venduto),n(d.gratta_pagati),c.gratta_rim,n(d.lotto_venduto),n(d.lotto_pagati),c.lotto_rim,n(d.toto),n(d.virtual),n(d.lis),n(d.sisal),n(d.valori),n(d.dist_prelievo),n(d.slot_raccolto),n(d.slot_monete),n(d.slot_refill),n(d.pf_oggi),n(d.pf_domani),n(d.monete_oggi),n(d.monete_domani),n(d.debiti_oggi),n(d.debiti_domani),n(d.arrotondamento),c.spese_cont,c.spese_ele,c.movimento,c.guadagno].join(";");
-                });
-                const aggiBar = AGGI_BAR_VOCI.map(v=>aggiLabel(v)+": "+totAggio(v).toFixed(2)).join(" | ");
-                const aggiTab = AGGI_TAB_VOCI.map(v=>aggiLabel(v)+": "+totAggio(v).toFixed(2)).join(" | ");
-                const summary = ["","RIEPILOGO "+MONTHS[month].toUpperCase()+" "+year,"Movimento mese;"+movMensile.toFixed(2),"Guadagno mese;"+mGuadagno.toFixed(2),"Aggi Bar;"+totAggiBar.toFixed(2),"Aggi Tabacchi;"+totAggiTab.toFixed(2),"Guadagno + Aggi;"+(mGuadagno+totAggi).toFixed(2),"Cassa accumulata;"+cassaAccumulata.toFixed(2),"Versato;"+totVersati.toFixed(2),"","Aggi Bar dettaglio;"+aggiBar,"Aggi Tab dettaglio;"+aggiTab].join("\n");
-                const csv = [headers.join(";"), ...rows, summary].join("\n");
-                const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = "cassa-pro-"+MONTHS[month]+"-"+year+".csv";
-                a.click();
-              }} style={{width:"100%",background:"#0f1923",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
-                📊 Esporta Excel/CSV ({MONTHS[month]} {year})
+              <button onClick={()=> exportExcel({
+                all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
+                AGGI_BAR_VOCI, AGGI_TAB_VOCI, aggiLabel, mk, vk, pk, pgk
+              })} style={{width:"100%",background:"#0f1923",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+                📊 Esporta Excel (.xlsx) — {MONTHS[month]} {year}
               </button>
 
               {/* GOOGLE DRIVE SYNC */}
@@ -1289,6 +2130,58 @@ export default function App() {
           </div>
         </>
       )}
+
+      {/* ── NOTA RAPIDA FLOATING ── */}
+      {view!=="annual"&&<>
+        {/* Bottone floating */}
+        <button onClick={()=>setNotaOpen(true)}
+          style={{position:"fixed",bottom:24,right:20,width:52,height:52,borderRadius:"50%",
+            background: today.nota_rapida ? "#1a1400" : "#0f1923",
+            color: today.nota_rapida ? "#fbbf24" : "#475569",
+            border:`2px solid ${today.nota_rapida?"#fbbf24":"#334155"}`,
+            fontSize:22,cursor:"pointer",zIndex:30,boxShadow:"0 4px 20px #00000088",
+            display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
+          📝
+        </button>
+
+        {/* Modal nota rapida */}
+        {notaOpen&&(
+          <div style={{position:"fixed",inset:0,background:"#00000099",zIndex:50,
+            display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+            <div style={{background:"#0d1526",borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",
+              width:"100%",maxWidth:700,border:"1px solid #1e293b",borderBottom:"none"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:800,color:"#fbbf24",letterSpacing:1}}>📝 NOTA RAPIDA</div>
+                  <div style={{fontSize:10,color:"#475569",marginTop:2}}>
+                    {String(day).padStart(2,"0")}/{String(month+1).padStart(2,"0")}/{year}
+                  </div>
+                </div>
+                <button onClick={()=>setNotaOpen(false)}
+                  style={{background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:8,
+                    padding:"6px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+              </div>
+              <textarea
+                autoFocus
+                value={today.nota_rapida||""}
+                onChange={e=>upd("nota_rapida",e.target.value)}
+                placeholder="Scrivi qui una nota per oggi... (es. chiusura anticipata, problema slot 2, fornitore chiamato...)"
+                style={{width:"100%",background:"#080e1c",color:"#e2e8f0",
+                  border:`1px solid ${today.nota_rapida?"#fbbf24":"#1e293b"}`,
+                  borderRadius:10,padding:14,fontSize:14,minHeight:130,
+                  boxSizing:"border-box",resize:"none",fontFamily:"inherit",lineHeight:1.6,outline:"none"}}/>
+              {today.nota_rapida&&(
+                <button onClick={()=>{upd("nota_rapida","");}}
+                  style={{marginTop:8,background:"transparent",color:"#475569",border:"none",
+                    fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
+                  🗑 Cancella nota
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </>}
+
     </div>
   );
 }
