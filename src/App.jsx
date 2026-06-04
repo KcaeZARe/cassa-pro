@@ -540,7 +540,19 @@ const gdriveLoad = async (token, fileId) => {
 };
 
 const STORAGE_KEY = "cassapro_v4";
-const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
+// Normalizza ricorsivamente tutti i valori stringa numerici — virgola → punto
+const normDecimals = (obj) => {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === "string") return /^-?\d+,\d+$/.test(obj.trim()) ? obj.replace(",",".") : obj;
+  if (Array.isArray(obj)) return obj.map(normDecimals);
+  if (typeof obj === "object") {
+    const out = {};
+    for (const k in obj) out[k] = normDecimals(obj[k]);
+    return out;
+  }
+  return obj;
+};
+const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? normDecimals(JSON.parse(r)) : {}; } catch { return {}; } };
 const persist = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
 
 const n = (v) => { const x = parseFloat(String(v??0).replace(/,/g,".")); return isNaN(x) ? 0 : x; };
