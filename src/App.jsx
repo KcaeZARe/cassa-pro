@@ -87,7 +87,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
            "setup_dip" | "change_dip" | "recovery"
     role:  "admin" | "dipendente"
   */
-  const LEN = (mode === "setup_dip_idx" || mode === "change_dip_idx" || mode === "setup_dip" || mode === "change_dip" || (mode === "unlock" && role === "dipendente")) ? 4 : 6;
+  const LEN = 6; // sempre 6 cifre per tutti — admin e dipendenti
   const emptyDigits = () => Array(LEN).fill("");
 
   const [digits,  setDigits]  = useState(emptyDigits);
@@ -381,11 +381,11 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
     change_dip:   "🔄 CAMBIA PIN DIPENDENTE",
   };
   const subMap = {
-    unlock:       role==="dipendente" ? "PIN a 4 cifre" : "PIN a 6 cifre",
+    unlock:       role==="dipendente" ? "PIN a 6 cifre" : "PIN a 6 cifre",
     setup_admin:  step==="enter" ? "Scegli un PIN a 6 cifre" : "Conferma PIN",
     change_admin: step==="enter" ? "Nuovo PIN a 6 cifre" : "Conferma nuovo PIN",
-    setup_dip:    step==="enter" ? "Scegli un PIN a 4 cifre" : "Conferma PIN",
-    change_dip:   step==="enter" ? "Nuovo PIN a 4 cifre" : "Conferma nuovo PIN",
+    setup_dip:    step==="enter" ? "Scegli un PIN a 6 cifre" : "Conferma PIN",
+    change_dip:   step==="enter" ? "Nuovo PIN a 6 cifre" : "Conferma nuovo PIN",
   };
 
   const accentColor = role==="dipendente" ? "#60a5fa" : "#4ade80";
@@ -1030,6 +1030,15 @@ export default function App() {
   const [all, setAll] = useState(load);
 
   // ── PIN STATE v3 ──
+  // Migrazione: se esistono PIN dipendenti (impostati con 4 cifre), li rimuove
+  // e mostra avviso al prossimo accesso admin
+  useEffect(() => {
+    const dipPINs = Object.keys(localStorage).filter(k=>k.startsWith(DIP_PIN_PREFIX));
+    if (dipPINs.length > 0 && !localStorage.getItem("cassapro_pin_migrated_v3")) {
+      dipPINs.forEach(k => localStorage.removeItem(k));
+      localStorage.setItem("cassapro_pin_migrated_v3", "1");
+    }
+  }, []);
   const [pinScreen, setPinScreen] = useState(() => {
     const s = getSession();
     if (s) return null;
@@ -1962,7 +1971,7 @@ export default function App() {
                       </div>
                     )}
                     <div style={{fontSize:10,color:"#334155",marginTop:8}}>
-                      Il PIN è a 4 cifre. Se lo dimentica, reimpostalo da qui.
+                      Il PIN è a 6 cifre. Se lo dimentica, reimpostalo da qui.
                     </div>
                   </Block>
 
