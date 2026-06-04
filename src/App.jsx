@@ -543,7 +543,7 @@ const STORAGE_KEY = "cassapro_v4";
 const load = () => { try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : {}; } catch { return {}; } };
 const persist = (d) => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {} };
 
-const n = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
+const n = (v) => { const x = parseFloat(String(v??0).replace(/,/g,".")); return isNaN(x) ? 0 : x; };
 const eur = (v, plus) => {
   const x = parseFloat(v);
   if (isNaN(x)) return "—";
@@ -797,11 +797,16 @@ function calcDay(t) {
 // UI atoms
 const Lbl = ({c}) => <div style={{fontSize:10,color:"#64748b",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>{c}</div>;
 const normTime = (t) => t.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
+const normDec  = (v) => String(v??0).replace(/,/g,".");
 const Inp = ({val,set,type="number",ph,isTime=false}) => (
   <input type="text"
     inputMode={type==="number"?"decimal":isTime?"numeric":"text"}
     value={val??""} onChange={e=>set(e.target.value)}
-    onBlur={isTime ? (e=>{ const v=normTime(e.target.value); if(v!==e.target.value) set(v); }) : undefined}
+    onBlur={isTime
+      ? (e=>{ const v=normTime(e.target.value); if(v!==e.target.value) set(v); })
+      : type==="number"
+        ? (e=>{ const v=normDec(e.target.value); if(v!==e.target.value) set(v); })
+        : undefined}
     placeholder={ph}
     style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}/>
 );
