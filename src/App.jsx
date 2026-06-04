@@ -97,6 +97,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
   const [recoveryInput, setRecoveryInput] = useState("");
   const [error,   setError]   = useState("");
   const [lockout, setLockout] = useState(0);
+  const [showReset, setShowReset] = useState(false);
   const refs        = useRef([]);
   const confirmRefs = useRef([]);
 
@@ -270,8 +271,10 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
         <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
           border:"1px solid #1e293b",boxShadow:"0 0 60px #4ade8011"}}>
           <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
-            <div style={{fontSize:11,color:"#475569",letterSpacing:1}}>CHI SEI?</div>
+            <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#f8fafc",
+              fontFamily:"Georgia,'Times New Roman',serif",marginBottom:2}}>La Lanterna</div>
+            <div style={{fontSize:9,color:"#334155",letterSpacing:4}}>CASSA PRO</div>
+            <div style={{fontSize:11,color:"#475569",letterSpacing:1,marginTop:8}}>CHI SEI?</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <button onClick={()=>onSuccess("admin")} style={{
@@ -387,8 +390,54 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
       alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
       <div style={{background:"#0d1526",borderRadius:20,padding:"36px 32px 28px",maxWidth:380,width:"100%",
         border:`1px solid ${borderColor}`,boxShadow:`0 0 60px ${accentColor}11`}}>
+
+        {/* MODAL RESET EMERGENZA */}
+        {showReset&&(
+          <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:100,display:"flex",
+            alignItems:"center",justifyContent:"center",padding:24}}>
+            <div style={{background:"#1a0505",border:"2px solid #f87171",borderRadius:16,padding:24,maxWidth:320,width:"100%"}}>
+              <div style={{fontSize:15,fontWeight:800,color:"#f87171",marginBottom:8}}>⚠️ Reset Emergenza</div>
+              <div style={{fontSize:12,color:"#94a3b8",marginBottom:20,lineHeight:1.6}}>
+                Tutti i PIN verranno rimossi.<br/>
+                <b style={{color:"#fbbf24"}}>I dati NON verranno cancellati.</b>
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>{
+                  Object.keys(localStorage)
+                    .filter(k=>k.startsWith("cassapro_pin")||k.startsWith("cassapro_dip_pin")||k.startsWith("cassapro_recovery"))
+                    .forEach(k=>localStorage.removeItem(k));
+                  sessionStorage.clear();
+                  window.location.reload();
+                }} style={{flex:1,background:"#7f1d1d",color:"#fca5a5",border:"none",borderRadius:8,
+                  padding:12,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  Sì, resetta PIN
+                </button>
+                <button onClick={()=>setShowReset(false)}
+                  style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:8,
+                    padding:12,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                  Annulla
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{textAlign:"center",marginBottom:24}}>
-          <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
+          {/* Logo — tocca 7 volte per reset emergenza */}
+          <div onClick={()=>{
+              const now = Date.now();
+              if (!window._pinTaps) window._pinTaps = [];
+              window._pinTaps = window._pinTaps.filter(t=>now-t<3000);
+              window._pinTaps.push(now);
+              if (window._pinTaps.length >= 7) { window._pinTaps = []; setShowReset(true); }
+            }}
+            style={{marginBottom:8,cursor:"default",userSelect:"none"}}>
+            <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#f8fafc",
+              fontFamily:"Georgia,'Times New Roman',serif",textShadow:"0 0 20px #ffffff22"}}>
+              La Lanterna
+            </div>
+            <div style={{fontSize:9,color:"#334155",letterSpacing:4,marginTop:2}}>CASSA PRO</div>
+          </div>
           <div style={{fontSize:13,fontWeight:700,color:accentColor,letterSpacing:1.5,marginBottom:6}}>{titleMap[mode]}</div>
           <div style={{fontSize:11,color:"#64748b"}}>{subMap[mode]}</div>
         </div>
@@ -1368,8 +1417,9 @@ export default function App() {
       <div style={{background:"linear-gradient(180deg,#0d1526 0%,#05090f 100%)",padding:"18px 16px 10px",position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e293b"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div>
-            <div style={{fontSize:16,fontWeight:800,letterSpacing:2,color:"#f8fafc"}}>◈ CASSA PRO</div>
-            <div style={{fontSize:10,color:"#334155",letterSpacing:1}}>GESTIONE CONTABILE GIORNALIERA</div>
+            <div style={{fontSize:16,fontWeight:900,letterSpacing:2,color:"#f8fafc",
+              fontFamily:"Georgia,'Times New Roman',serif"}}>La Lanterna</div>
+            <div style={{fontSize:9,color:"#334155",letterSpacing:2}}>CASSA PRO</div>
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
