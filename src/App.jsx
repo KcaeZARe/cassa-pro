@@ -1861,7 +1861,6 @@ export default function App() {
                         </div>
                       </div>
                     )}
-                    </div>
                     <div style={{fontSize:10,color:"#334155",marginTop:8}}>
                       Il PIN è a 4 cifre. Se lo dimentica, reimpostalo da qui.
                     </div>
