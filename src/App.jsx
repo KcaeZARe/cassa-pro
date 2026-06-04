@@ -81,7 +81,7 @@ const setAttempts = (role, obj) => localStorage.setItem(ATTEMPTS_KEY+"_"+role, J
 const resetAttempts = (role) => localStorage.removeItem(ATTEMPTS_KEY+"_"+role);
 
 // ── Componente schermata PIN ────────────────────────────────
-function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, onSuccessDip, dipIdx }) {
+function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, onSuccessDip, dipIdx, noDipPin }) {
   /*
     mode:  "choose_role" | "unlock" | "setup_admin" | "change_admin"
            "setup_dip" | "change_dip" | "recovery"
@@ -293,6 +293,13 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
               <div>Dipendente</div>
               <div style={{fontSize:11,color:"#60a5fa88",fontWeight:400,marginTop:2}}>Solo inserimento presenze</div>
             </button>
+            {noDipPin&&(
+              <div style={{background:"#1a0a00",border:"1px solid #713f12",borderRadius:10,
+                padding:"10px 14px",fontSize:12,color:"#f97316",fontWeight:700,textAlign:"center"}}>
+                ⚠️ Nessun PIN dipendente impostato.<br/>
+                <span style={{fontWeight:400,color:"#94a3b8"}}>Chiedi al titolare di configurarlo.</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -598,7 +605,7 @@ const emptyAggiMese = () => {
 const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
   AGGI_BAR_VOCI, AGGI_TAB_VOCI, aggiLabel, mk, vk, pk, pgk }) => {
   const XLSX = window.XLSX;
-  if (!XLSX) { alert("SheetJS non caricato. Ricarica la pagina e riprova."); return; }
+  if (!XLSX) { console.error("SheetJS non caricato"); return; }
   const wb = XLSX.utils.book_new();
 
   // ── Foglio 1: GIORNALIERO ──
@@ -1103,9 +1110,10 @@ export default function App() {
   const [flash, setFlash] = useState(false);
   const [selDip, setSelDip] = useState(null);
   const [confirmDelDip, setConfirmDelDip] = useState(null);
-  const [confirmRemPinDip, setConfirmRemPinDip] = useState(null); // idx dip
+  const [confirmRemPinDip, setConfirmRemPinDip] = useState(null);
   const [confirmRemAdminPIN, setConfirmRemAdminPIN] = useState(false);
   const [driveStatus, setDriveStatus] = useState("");
+  const [restoreStatus, setRestoreStatus] = useState("");
   const [notaOpen, setNotaOpen] = useState(false);
 
   const handleDriveSave = async () => {
@@ -1127,12 +1135,15 @@ export default function App() {
   };
 
   const handleDriveLoad = async () => {
-    if (!window.confirm("Vuoi caricare i dati da Google Drive? I dati locali verranno sostituiti.")) return;
+    setDriveStatus("confirm_load");
+  };
+
+  const handleDriveLoadConfirmed = async () => {
     setDriveStatus("syncing");
     try {
       const token = await gdriveAuth();
       const fileId = await gdriveFindFile(token);
-      if (!fileId) { alert("Nessun backup trovato su Drive."); setDriveStatus(""); return; }
+      if (!fileId) { setDriveStatus("nobackup"); setTimeout(()=>setDriveStatus(""),3000); return; }
       const imported = await gdriveLoad(token, fileId);
       setAll(imported);
       persist(imported);
@@ -1350,8 +1361,16 @@ export default function App() {
       } else {
         const tot = Object.keys(localStorage).filter(k=>k.startsWith(DIP_PIN_PREFIX)).length;
         if (tot > 0) setPinScreen("unlock_dip");
-        else { alert("Nessun PIN dipendente impostato. Chiedi al titolare."); }
+        else setPinScreen("no_dip_pin");
       }
+    }}/>;
+  }
+  if (pinScreen === "no_dip_pin") {
+    return <PINScreen mode="choose_role" noDipPin={true} onSuccess={(role) => {
+      if (role === "admin") {
+        if (hasAdminPIN()) setPinScreen("unlock_admin");
+        else { setCurrentRole("admin"); setPinScreen(null); }
+      } else setPinScreen("no_dip_pin");
     }}/>;
   }
   if (pinScreen === "unlock_admin") {
@@ -1425,7 +1444,13 @@ export default function App() {
             {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
             {/* Pulsante lock */}
             <button
-              onClick={() => { clearSession(); setCurrentRole(null); setCurrentDipIdx(null); setPinScreen(hasAdminPIN() ? "choose_role" : null); }}
+              onClick={() => {
+                if (hasAdminPIN()) {
+                  clearSession(); setCurrentRole(null); setCurrentDipIdx(null); setPinScreen("choose_role");
+                } else {
+                  setPinMode("setup_admin");
+                }
+              }}
               title={hasAdminPIN() ? "Blocca app" : "Imposta PIN"}
               style={{background:"#1e293b",color: hasAdminPIN() ? "#fbbf24" : "#475569",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
               {hasAdminPIN() ? "🔒" : "🔓"}
@@ -2381,16 +2406,34 @@ export default function App() {
                     style={{flex:1,background:"#0a1a2a",color:"#4ade80",border:"1px solid #166534",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                     {driveStatus==="syncing"?"⏳ Salvataggio...":driveStatus==="ok"?"✅ Salvato!":driveStatus==="error"?"❌ Errore":"☁️ Salva su Drive"}
                   </button>
-                  <button onClick={handleDriveLoad} disabled={driveStatus==="syncing"}
+                  <button onClick={handleDriveLoad} disabled={driveStatus==="syncing"||driveStatus==="confirm_load"}
                     style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                    {driveStatus==="syncing"?"⏳ Caricamento...":"📥 Carica da Drive"}
+                    {driveStatus==="syncing"?"⏳ Caricamento...":driveStatus==="nobackup"?"❌ Nessun backup":"📥 Carica da Drive"}
                   </button>
                 </div>
+                {/* Conferma caricamento Drive — inline, funziona su mobile */}
+                {driveStatus==="confirm_load"&&(
+                  <div style={{background:"#0a1a2a",border:"1px solid #f97316",borderRadius:10,padding:12,marginTop:10}}>
+                    <div style={{fontSize:12,color:"#f97316",marginBottom:10,fontWeight:700}}>
+                      ⚠️ I dati locali verranno sostituiti con quelli del Drive. Continuare?
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={handleDriveLoadConfirmed}
+                        style={{flex:1,background:"#1e3a5f",color:"#60a5fa",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        Sì, carica
+                      </button>
+                      <button onClick={()=>setDriveStatus("")}
+                        style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+                        Annulla
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div style={{fontSize:10,color:"#475569",marginTop:8}}>La prima volta ti chiederà di autorizzare con Google</div>
               </div>
 
               <label style={{display:"block",width:"100%",background:"#0f1923",color:"#a78bfa",border:"1px solid #3b0764",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8,textAlign:"center",boxSizing:"border-box"}}>
-                📂 Ripristina da backup (JSON)
+                {restoreStatus==="ok"?"✅ Ripristinato!":restoreStatus==="error"?"❌ File non valido":"📂 Ripristina da backup (JSON)"}
                 <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{
                   const file = e.target.files[0];
                   if (!file) return;
@@ -2400,8 +2443,12 @@ export default function App() {
                       const imported = JSON.parse(ev.target.result);
                       setAll(imported);
                       persist(imported);
-                      alert("Backup ripristinato con successo!");
-                    } catch { alert("File non valido"); }
+                      setRestoreStatus("ok");
+                      setTimeout(()=>setRestoreStatus(""),3000);
+                    } catch {
+                      setRestoreStatus("error");
+                      setTimeout(()=>setRestoreStatus(""),3000);
+                    }
                   };
                   reader.readAsText(file);
                 }}/>
