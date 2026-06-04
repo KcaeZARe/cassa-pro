@@ -677,6 +677,9 @@ const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
   XLSX.writeFile(wb, `CassaPro_${MONTHS[month]}_${year}.xlsx`);
 };
 
+const TIPO_IT    = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
+const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
+
 function calcDay(t) {
   if (!t) return { tab_rim:0,gratta_rim:0,lotto_rim:0,spese_cont:0,spese_ele:0,pf_diff:0,monete_diff:0,debiti_diff:0,movimento:0,guadagno:0 };
   const tab_rim = n(t.tab_venduto) - n(t.tab_pos);
@@ -770,8 +773,6 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay, perso
     if(isNaN(eh)||isNaN(uh)) return 0;
     return Math.max(0,((uh*60+um)-(eh*60+em))/60);
   };
-  const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
-  const TIPO_IT    = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
 
   return (
     <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
@@ -1126,9 +1127,6 @@ export default function App() {
     const totale = paga + straoTot - anticipiTot;
     return { ore: oreTot, paga, straordinari: straoTot, anticipi: anticipiTot, totale };
   };
-
-  const TIPO_LABEL = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
-  const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
 
   // Calcolo cassa accumulata (residuo mese precedente + movimenti mese corrente - versamenti)
   const days = dim(year, month);
@@ -1783,8 +1781,6 @@ export default function App() {
                   </div>
                 );
               })}
-            </>}
-
             </>}
 
             {/* ── RIEPILOGO ANNUALE ── */}
