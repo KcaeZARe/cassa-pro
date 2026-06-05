@@ -982,16 +982,21 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
                 {field:"turno_pranzo", label:"☀️ Turno Pranzo"},
                 {field:"turno_cena",   label:"🌙 Turno Cena"},
               ].map(({field,label})=>(
-                <label key={field} onClick={locked?e=>e.preventDefault():undefined}
-                  style={{flex:1,display:"flex",alignItems:"center",gap:8,cursor:locked?"not-allowed":"pointer",
+                <div key={field}
+                  style={{flex:1,display:"flex",alignItems:"center",gap:8,
                     background:p[field]?"#052e16":"var(--cp-bg4)",borderRadius:10,padding:"14px 12px",
-                    border:`2px solid ${p[field]?"#4ade80":"var(--cp-border)"}`,transition:"all 0.15s",
-                    opacity:locked?0.6:1}}>
-                  <input type="checkbox" checked={!!p[field]} disabled={locked}
-                    onChange={e=>updP(dipIdx,day,field,e.target.checked)}
-                    style={{width:18,height:18,cursor:locked?"not-allowed":"pointer"}}/>
+                    border:`2px solid ${p[field]?"#4ade80":"var(--cp-border)"}`,
+                    opacity:locked?0.55:1,
+                    cursor:locked?"not-allowed":"pointer"}}
+                  onClick={()=>{ if(!locked) updP(dipIdx,day,field,!p[field]); }}>
+                  <div style={{width:18,height:18,borderRadius:3,flexShrink:0,
+                    background:p[field]?"#4ade80":"var(--cp-border)",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    border:`2px solid ${p[field]?"#4ade80":"var(--cp-text3)"}`}}>
+                    {p[field]&&<span style={{color:"#052e16",fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
+                  </div>
                   <span style={{fontSize:13,fontWeight:700,color:p[field]?"#4ade80":"var(--cp-text3)"}}>{label}</span>
-                </label>
+                </div>
               ))}
             </div>
           ) : (<>
@@ -1046,13 +1051,13 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
           </div>
         </div>
 
-        {/* Storico mese */}
-        <div style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
+        {/* Storico mese — oggi in cima, passati sotto */}
+        <div style={{background:"var(--cp-bg3)",borderRadius:12,border:"1px solid var(--cp-border)",borderLeft:"4px solid #334155",padding:14}}>
           <div style={{fontSize:11,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:10}}>
             STORICO — {MONTHS[month]} {year}
           </div>
           {Array.from({length:days},(_,gi)=>{
-            const d=gi+1;
+            const d = days - gi; // ordine inverso: oggi prima
             const pp=getP(dipIdx,d);
             const oo= n(pp.ore_manuali)>0 ? n(pp.ore_manuali) : calcOre(pp.entrata,pp.uscita);
             const has = isRisto
@@ -1063,8 +1068,8 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
             const isTod=year===todayY&&month===todayM&&d===todayD;
             return (
               <div key={d} onClick={()=>setDay(d)}
-                style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",
-                  borderBottom:"1px solid #080e1c",fontSize:12,cursor:"pointer",
+                style={{display:"flex",justifyContent:"space-between",padding:"8px 6px",
+                  borderBottom:"1px solid var(--cp-border)",fontSize:12,cursor:"pointer",
                   background:isTod?"var(--cp-bg2)":"transparent",borderRadius:isTod?4:0}}>
                 <span style={{color:isTod?"#60a5fa":"var(--cp-text3)"}}>{wd} {d}{isTod?" 📍":""}</span>
                 <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
@@ -1171,39 +1176,39 @@ export default function App() {
   const [year, setYear] = useState(now.getFullYear());
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("cassapro_theme") !== "light");
 
-  // Applica tema come CSS variables globali — copre TUTTI i componenti
+  // Applica tema come CSS variables globali
   useEffect(() => {
     const r = document.documentElement;
     if (darkMode) {
-      r.style.setProperty("--cp-bg",      "var(--cp-bg)");
-      r.style.setProperty("--cp-bg2",     "var(--cp-bg2)");
-      r.style.setProperty("--cp-bg3",     "var(--cp-bg3)");
-      r.style.setProperty("--cp-bg4",     "var(--cp-bg4)");
-      r.style.setProperty("--cp-border",  "var(--cp-border)");
-      r.style.setProperty("--cp-border2", "var(--cp-border2)");
-      r.style.setProperty("--cp-text",    "var(--cp-text)");
-      r.style.setProperty("--cp-text2",   "var(--cp-text2)");
-      r.style.setProperty("--cp-text3",   "var(--cp-text3)");
-      r.style.setProperty("--cp-text4",   "var(--cp-text4)");
-      r.style.setProperty("--cp-header",  "var(--cp-header)");
-      r.style.setProperty("--cp-inp",     "var(--cp-bg4)");
-      r.style.setProperty("--cp-sel",     "var(--cp-bg4)");
+      r.style.setProperty("--cp-bg",      "#05090f");
+      r.style.setProperty("--cp-bg2",     "#0d1526");
+      r.style.setProperty("--cp-bg3",     "#0f1923");
+      r.style.setProperty("--cp-bg4",     "#080e1c");
+      r.style.setProperty("--cp-border",  "#1e293b");
+      r.style.setProperty("--cp-border2", "#1e3a5f");
+      r.style.setProperty("--cp-text",    "#e2e8f0");
+      r.style.setProperty("--cp-text2",   "#94a3b8");
+      r.style.setProperty("--cp-text3",   "#64748b");
+      r.style.setProperty("--cp-text4",   "#475569");
+      r.style.setProperty("--cp-header",  "#0a1520");
+      r.style.setProperty("--cp-inp",     "#080e1c");
+      r.style.setProperty("--cp-sel",     "#080e1c");
     } else {
       r.style.setProperty("--cp-bg",      "#f1f5f9");
       r.style.setProperty("--cp-bg2",     "#ffffff");
-      r.style.setProperty("--cp-bg3",     "#f8fafc");
-      r.style.setProperty("--cp-bg4",     "var(--cp-text)");
+      r.style.setProperty("--cp-bg3",     "#ffffff");
+      r.style.setProperty("--cp-bg4",     "#f0f4f8");
       r.style.setProperty("--cp-border",  "#cbd5e1");
       r.style.setProperty("--cp-border2", "#93c5fd");
       r.style.setProperty("--cp-text",    "#0f172a");
       r.style.setProperty("--cp-text2",   "#334155");
-      r.style.setProperty("--cp-text3",   "var(--cp-text4)");
-      r.style.setProperty("--cp-text4",   "var(--cp-text3)");
+      r.style.setProperty("--cp-text3",   "#475569");
+      r.style.setProperty("--cp-text4",   "#64748b");
       r.style.setProperty("--cp-header",  "#ffffff");
-      r.style.setProperty("--cp-inp",     "#f1f5f9");
-      r.style.setProperty("--cp-sel",     "#f1f5f9");
+      r.style.setProperty("--cp-inp",     "#ffffff");
+      r.style.setProperty("--cp-sel",     "#f8fafc");
     }
-    document.body.style.background = darkMode ? "var(--cp-bg)" : "#f1f5f9";
+    document.body.style.background = darkMode ? "#05090f" : "#f1f5f9";
   }, [darkMode]);
 
   const T = {
@@ -2250,15 +2255,22 @@ export default function App() {
                   {/* PRESENZE GIORNALIERE */}
                   <Block title="Presenze Giornaliere" accent="#a78bfa">
                     {Array.from({length:dim(year,month)},(_,gi)=>{
-                      const d = gi+1;
+                      // Ordine inverso: oggi in cima, passati sotto
+                      const d = dim(year,month) - gi;
                       const p = getPresenza(selDip,d);
                       const ore = n(p.ore_manuali)>0 ? n(p.ore_manuali) : calcOre(p.entrata,p.uscita);
                       const wd = new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
                       const isRisto = (dip.ruolo||"bar")==="risto";
+                      const isToday2 = d===new Date().getDate()&&month===new Date().getMonth()&&year===new Date().getFullYear();
                       return (
-                        <div key={d} style={{background:"var(--cp-bg4)",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"var(--cp-border)"}`}}>
+                        <div key={d} style={{background:"var(--cp-bg4)",borderRadius:8,padding:10,marginBottom:8,
+                          borderLeft:`3px solid ${isToday2?"#60a5fa":TIPO_COLOR[p.tipo]||"var(--cp-border)"}`,
+                          border:"1px solid var(--cp-border)",borderLeftWidth:3,
+                          borderLeftColor:isToday2?"#60a5fa":TIPO_COLOR[p.tipo]||"var(--cp-border)"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <span style={{fontSize:12,fontWeight:800,color:"var(--cp-text)"}}>{wd} {d}</span>
+                            <span style={{fontSize:12,fontWeight:800,color:isToday2?"#60a5fa":"var(--cp-text)"}}>
+                              {wd} {d}{isToday2?" 📍 OGGI":""}
+                            </span>
                             {!isRisto&&(
                               <select value={p.tipo||"lavoro"} onChange={e=>updPresenza(selDip,d,"tipo",e.target.value)}
                                 style={{background:"var(--cp-bg3)",color:TIPO_COLOR[p.tipo||"lavoro"],border:"1px solid var(--cp-border)",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
