@@ -576,8 +576,12 @@ const pgk = () => "pagamenti_globali";
 const emptyPagamento = () => ({ motivo:"", importo:"", data_scadenza:"", pagato:false, data_pagato:"" });
 
 const emptyDipendente = () => ({
- nome:"", stipendio:"", ore_mensili:"", maggiorazione:"25", data_pagamento:"" });
-const emptyPresenza = () => ({ entrata:"", uscita:"", tipo:"lavoro", straordinari:"", anticipo:"", nota:"" });
+  nome:"", ruolo:"bar", stipendio:"", ore_mensili:"", turni_mensili:"",
+  maggiorazione:"25", data_pagamento:"" });
+const emptyPresenza = () => ({
+  entrata:"", uscita:"", ore_manuali:"", tipo:"lavoro",
+  turno_pranzo:false, turno_cena:false,
+  straordinari:"", anticipo:"", nota:"" });
 // tipo: lavoro | malattia | permesso | assenza | ferie
 
 const emptyDay = () => ({
@@ -839,7 +843,9 @@ const Fld = ({label,val,set,flex="1 1 110px",type="number",isTime=false}) => (
 );
 const Row = ({children,mb=10}) => <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:mb}}>{children}</div>;
 const Block = ({title,accent,children}) => (
-  <div style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:`4px solid ${accent}`,padding:"14px 14px 8px",marginBottom:14}}>
+  <div style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:`4px solid ${accent}`,
+    border:`1px solid var(--cp-border)`,borderLeftWidth:4,borderLeftColor:accent,
+    padding:"14px 14px 8px",marginBottom:14}}>
     <div style={{fontSize:11,fontWeight:800,color:accent,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>{title}</div>
     {children}
   </div>
@@ -911,8 +917,9 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
   );
 
   const p   = getP(dipIdx, day);
-  const ore = calcOre(p.entrata, p.uscita);
-  const locked = isPast; // giorni passati: sola lettura
+  const isRisto = (dip.ruolo||"bar") === "risto";
+  const ore = n(p.ore_manuali)>0 ? n(p.ore_manuali) : calcOre(p.entrata, p.uscita);
+  const locked = isPast;
 
   return (
     <div style={{minHeight:"100vh",background:"var(--cp-bg)",color:"var(--cp-text)",
@@ -968,51 +975,64 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
             {isToday&&<span style={{marginLeft:8,background:"var(--cp-bg2)",color:"#4ade80",padding:"2px 8px",borderRadius:10,fontSize:10}}>OGGI</span>}
           </div>
 
-          {/* Tipo giornata */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
-            <select value={p.tipo||"lavoro"} disabled={locked}
-              onChange={e=>updP(dipIdx,day,"tipo",e.target.value)}
-              style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":TIPO_COLOR[p.tipo||"lavoro"],
-                border:"1px solid #1e293b",padding:"10px 12px",borderRadius:8,
-                fontSize:13,fontFamily:"inherit",fontWeight:700,
-                cursor:locked?"not-allowed":"pointer"}}>
-              {Object.entries(TIPO_IT).map(([k,v])=><option key={k} value={k}>{v}</option>)}
-            </select>
-          </div>
-
-          {/* Entrata / Uscita / Ore */}
-          {(p.tipo==="lavoro"||!p.tipo)&&(
+          {isRisto ? (
+            /* RISTORAZIONE — turni pranzo/cena */
             <div style={{display:"flex",gap:10,marginBottom:12}}>
               {[
-                {label:"ENTRATA",field:"entrata",ph:"08:00"},
-                {label:"USCITA", field:"uscita", ph:"16:00"},
-              ].map(({label,field,ph})=>(
-                <div key={field} style={{flex:1}}>
-                  <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>{label}</div>
-                  <input type="text" value={p[field]||""} disabled={locked}
-                    onChange={e=>updP(dipIdx,day,field,e.target.value)}
-                    onBlur={e=>{
-                      // Normalizza automaticamente: 20;00 → 20:00
-                      const v = e.target.value.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
-                      if (v !== e.target.value) updP(dipIdx,day,field,v);
-                    }}
-                    placeholder={ph}
-                    style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":"var(--cp-text)",
-                      border:`1px solid ${locked?"var(--cp-bg3)":"var(--cp-border)"}`,borderRadius:7,
-                      padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box",
-                      cursor:locked?"not-allowed":"text"}}/>
-                </div>
+                {field:"turno_pranzo", label:"☀️ Turno Pranzo"},
+                {field:"turno_cena",   label:"🌙 Turno Cena"},
+              ].map(({field,label})=>(
+                <label key={field} onClick={locked?e=>e.preventDefault():undefined}
+                  style={{flex:1,display:"flex",alignItems:"center",gap:8,cursor:locked?"not-allowed":"pointer",
+                    background:p[field]?"#052e16":"var(--cp-bg4)",borderRadius:10,padding:"14px 12px",
+                    border:`2px solid ${p[field]?"#4ade80":"var(--cp-border)"}`,transition:"all 0.15s",
+                    opacity:locked?0.6:1}}>
+                  <input type="checkbox" checked={!!p[field]} disabled={locked}
+                    onChange={e=>updP(dipIdx,day,field,e.target.checked)}
+                    style={{width:18,height:18,cursor:locked?"not-allowed":"pointer"}}/>
+                  <span style={{fontSize:13,fontWeight:700,color:p[field]?"#4ade80":"var(--cp-text3)"}}>{label}</span>
+                </label>
               ))}
-              <div style={{flex:1}}>
-                <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>ORE</div>
-                <div style={{background:"var(--cp-bg4)",border:"1px solid #1e293b",borderRadius:7,
-                  padding:"10px",fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>
-                  {ore.toFixed(1)}h
+            </div>
+          ) : (<>
+            {/* BAR — tipo giornata + orario */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
+              <select value={p.tipo||"lavoro"} disabled={locked}
+                onChange={e=>updP(dipIdx,day,"tipo",e.target.value)}
+                style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":TIPO_COLOR[p.tipo||"lavoro"],
+                  border:"1px solid var(--cp-border)",padding:"10px 12px",borderRadius:8,
+                  fontSize:13,fontFamily:"inherit",fontWeight:700,cursor:locked?"not-allowed":"pointer"}}>
+                {Object.entries(TIPO_IT).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+            {(p.tipo==="lavoro"||!p.tipo)&&(
+              <div style={{display:"flex",gap:10,marginBottom:12}}>
+                {[
+                  {label:"ENTRATA",field:"entrata",ph:"08:00"},
+                  {label:"USCITA", field:"uscita", ph:"16:00"},
+                ].map(({label,field,ph})=>(
+                  <div key={field} style={{flex:1}}>
+                    <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>{label}</div>
+                    <input type="text" value={p[field]||""} disabled={locked}
+                      onChange={e=>updP(dipIdx,day,field,e.target.value)}
+                      onBlur={e=>{ const v=e.target.value.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,""); if(v!==e.target.value) updP(dipIdx,day,field,v); }}
+                      placeholder={ph} inputMode="numeric"
+                      style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":"var(--cp-text)",
+                        border:`1px solid ${locked?"var(--cp-bg3)":"var(--cp-border)"}`,borderRadius:7,
+                        padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box",cursor:locked?"not-allowed":"text"}}/>
+                  </div>
+                ))}
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>ORE</div>
+                  <div style={{background:"var(--cp-bg4)",border:"1px solid var(--cp-border)",borderRadius:7,
+                    padding:"10px",fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>
+                    {ore.toFixed(1)}h
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </>)}
 
           {/* Note */}
           <div>
@@ -1022,8 +1042,7 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
               placeholder="Note..."
               style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":"var(--cp-text)",
                 border:`1px solid ${locked?"var(--cp-bg3)":"var(--cp-border)"}`,borderRadius:7,
-                padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box",
-                cursor:locked?"not-allowed":"text"}}/>
+                padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box",cursor:locked?"not-allowed":"text"}}/>
           </div>
         </div>
 
@@ -1035,8 +1054,10 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
           {Array.from({length:days},(_,gi)=>{
             const d=gi+1;
             const pp=getP(dipIdx,d);
-            const oo=calcOre(pp.entrata,pp.uscita);
-            const has=pp.entrata||pp.uscita||pp.tipo==="malattia"||pp.tipo==="ferie"||pp.tipo==="permesso"||pp.tipo==="assenza";
+            const oo= n(pp.ore_manuali)>0 ? n(pp.ore_manuali) : calcOre(pp.entrata,pp.uscita);
+            const has = isRisto
+              ? (pp.turno_pranzo||pp.turno_cena)
+              : (pp.entrata||pp.uscita||pp.tipo==="malattia"||pp.tipo==="ferie"||pp.tipo==="permesso"||pp.tipo==="assenza");
             if(!has) return null;
             const wd=new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
             const isTod=year===todayY&&month===todayM&&d===todayD;
@@ -1047,8 +1068,10 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
                   background:isTod?"var(--cp-bg2)":"transparent",borderRadius:isTod?4:0}}>
                 <span style={{color:isTod?"#60a5fa":"var(--cp-text3)"}}>{wd} {d}{isTod?" 📍":""}</span>
                 <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
-                  {pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
-                  {pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
+                  {isRisto
+                    ? [pp.turno_pranzo&&"☀️Pranzo", pp.turno_cena&&"🌙Cena"].filter(Boolean).join(" + ")||"—"
+                    : pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
+                  {!isRisto&&pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
                 </span>
               </div>
             );
@@ -1393,19 +1416,38 @@ export default function App() {
 
   const calcMensile = (dipIdx) => {
     const dip = (personale.dipendenti||[])[dipIdx];
-    if (!dip) return { ore:0, paga:0, straordinari:0, anticipi:0, totale:0 };
-    const tariffa = n(dip.stipendio) / (n(dip.ore_mensili)||1);
-    let oreTot = 0, straoTot = 0, anticipiTot = 0;
+    if (!dip) return { ore:0, turni:0, turniTot:0, paga:0, straordinari:0, anticipi:0, totale:0, compensoUnitario:0 };
+    const ruolo = dip.ruolo || "bar";
     const dim2 = new Date(year, month+1, 0).getDate();
+    let oreTot = 0, turniTot_raggiunti = 0, straoTot = 0, anticipiTot = 0;
+
     for (let d=1; d<=dim2; d++) {
       const p = getPresenza(dipIdx, d);
-      if (p.tipo === "lavoro") oreTot += calcOre(p.entrata, p.uscita);
+      if (ruolo === "bar") {
+        if (p.tipo === "lavoro" || !p.tipo) {
+          // Ore manuali sovrascrivono il calcolo automatico
+          if (n(p.ore_manuali) > 0) oreTot += n(p.ore_manuali);
+          else oreTot += calcOre(p.entrata, p.uscita);
+        }
+      } else {
+        // ristorazione: conta turni
+        if (p.turno_pranzo) turniTot_raggiunti++;
+        if (p.turno_cena)   turniTot_raggiunti++;
+      }
       straoTot += n(p.straordinari);
       anticipiTot += n(p.anticipo);
     }
-    const paga = oreTot * tariffa;
-    const totale = paga + straoTot - anticipiTot;
-    return { ore: oreTot, paga, straordinari: straoTot, anticipi: anticipiTot, totale };
+
+    if (ruolo === "bar") {
+      const tariffa = n(dip.stipendio) / (n(dip.ore_mensili)||1);
+      const paga = oreTot * tariffa;
+      return { ore:oreTot, turni:0, turniTot:0, paga, straordinari:straoTot, anticipi:anticipiTot, totale:paga+straoTot-anticipiTot, compensoUnitario:tariffa };
+    } else {
+      const turniMensili = n(dip.turni_mensili) || 1;
+      const compensoTurno = n(dip.stipendio) / turniMensili;
+      const paga = turniTot_raggiunti * compensoTurno;
+      return { ore:0, turni:turniTot_raggiunti, turniTot:n(dip.turni_mensili), paga, straordinari:straoTot, anticipi:anticipiTot, totale:paga+straoTot-anticipiTot, compensoUnitario:compensoTurno };
+    }
   };
 
   // Calcolo cassa accumulata (residuo mese precedente + movimenti mese corrente - versamenti)
@@ -2150,51 +2192,108 @@ export default function App() {
                   <Block title="Dati Contrattuali" accent="#60a5fa">
                     <Row>
                       <Fld label="Nome" val={dip.nome} set={v=>updDipendente(selDip,"nome",v)} type="text" flex="2 1 140px"/>
-                      <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(selDip,"stipendio",v)}/>
-                      <Fld label="Ore mensili" val={dip.ore_mensili} set={v=>updDipendente(selDip,"ore_mensili",v)}/>
+                      <div style={{flex:"1 1 120px"}}>
+                        <Lbl c="Ruolo"/>
+                        <select value={dip.ruolo||"bar"} onChange={e=>updDipendente(selDip,"ruolo",e.target.value)}
+                          style={{width:"100%",background:"var(--cp-inp)",color:"var(--cp-text)",border:"1px solid var(--cp-border)",padding:"9px 10px",borderRadius:7,fontSize:13,fontFamily:"inherit"}}>
+                          <option value="bar">🍺 Bar</option>
+                          <option value="risto">🍽️ Ristorazione</option>
+                        </select>
+                      </div>
                     </Row>
                     <Row>
-                      <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(selDip,"data_pagamento",v)} type="text" flex="2 1 180px"/>
-                      <div style={{flex:"1 1 120px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
-                        <span style={{fontSize:11,color:"var(--cp-text4)"}}>Banner 7 giorni prima</span>
+                      <Fld label="Stipendio base (€)" val={dip.stipendio} set={v=>updDipendente(selDip,"stipendio",v)}/>
+                      {(dip.ruolo||"bar")==="bar"
+                        ? <Fld label="Ore mensili" val={dip.ore_mensili} set={v=>updDipendente(selDip,"ore_mensili",v)}/>
+                        : <Fld label="Turni mensili totali" val={dip.turni_mensili} set={v=>updDipendente(selDip,"turni_mensili",v)}/>
+                      }
+                    </Row>
+                    {(dip.ruolo||"bar")==="bar"&&n(dip.ore_mensili)>0&&(
+                      <div style={{fontSize:11,color:"var(--cp-text3)",marginBottom:8}}>
+                        Compenso orario: <b style={{color:"#60a5fa"}}>{eur(n(dip.stipendio)/n(dip.ore_mensili))}/ora</b>
                       </div>
+                    )}
+                    {(dip.ruolo||"bar")==="risto"&&n(dip.turni_mensili)>0&&(
+                      <div style={{fontSize:11,color:"var(--cp-text3)",marginBottom:8}}>
+                        Compenso turno: <b style={{color:"#60a5fa"}}>{eur(n(dip.stipendio)/n(dip.turni_mensili))}/turno</b>
+                      </div>
+                    )}
+                    <Row>
+                      <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(selDip,"data_pagamento",v)} type="text" flex="2 1 180px"/>
                     </Row>
                   </Block>
 
                   {/* RIEPILOGO MESE */}
                   <Block title={"Riepilogo "+MONTHS[month]+" "+year} accent="#4ade80">
-                    <RRow label="Ore lavorate" val={mens.ore.toFixed(1)+"h"} color="#4ade80"/>
-                    <RRow label="Paga ordinaria" val={eur(mens.paga)} color="#4ade80"/>
+                    {(dip.ruolo||"bar")==="bar" ? (<>
+                      <RRow label="Ore lavorate" val={mens.ore.toFixed(1)+"h"} color="#4ade80"/>
+                      <RRow label="Compenso orario" val={eur(mens.compensoUnitario)+"/ora"} color="#60a5fa"/>
+                      <RRow label="Paga ordinaria" val={eur(mens.paga)} color="#4ade80"/>
+                    </>) : (<>
+                      <RRow label={`Turni raggiunti`} val={`${mens.turni} / ${mens.turniTot}`} color="#4ade80"/>
+                      <div style={{background:"var(--cp-bg4)",borderRadius:8,padding:"6px 10px",margin:"6px 0"}}>
+                        <div style={{fontSize:10,color:"var(--cp-text3)",marginBottom:4}}>PROGRESSO TURNI</div>
+                        <div style={{background:"var(--cp-border)",borderRadius:4,height:8,overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${mens.turniTot>0?Math.min(100,(mens.turni/mens.turniTot)*100):0}%`,background:"#4ade80",borderRadius:4}}/>
+                        </div>
+                        <div style={{fontSize:10,color:"#4ade80",marginTop:3,textAlign:"right"}}>{mens.turniTot>0?Math.round((mens.turni/mens.turniTot)*100):0}%</div>
+                      </div>
+                      <RRow label="Compenso turno" val={eur(mens.compensoUnitario)+"/turno"} color="#60a5fa"/>
+                      <RRow label="Paga raggiunta" val={eur(mens.paga)} color="#4ade80"/>
+                    </>)}
                     <RRow label="Straordinari" val={eur(mens.straordinari)} color="#fbbf24"/>
                     <RRow label="− Anticipi" val={eur(-mens.anticipi)} color="#f87171"/>
                     <div style={{height:4}}/>
                     <RRow label="TOTALE DA PAGARE" val={eur(mens.totale)} color="#60a5fa" bold/>
                   </Block>
 
-                  {/* PRESENZE */}
+                  {/* PRESENZE GIORNALIERE */}
                   <Block title="Presenze Giornaliere" accent="#a78bfa">
                     {Array.from({length:dim(year,month)},(_,gi)=>{
                       const d = gi+1;
                       const p = getPresenza(selDip,d);
-                      const ore = calcOre(p.entrata, p.uscita);
+                      const ore = n(p.ore_manuali)>0 ? n(p.ore_manuali) : calcOre(p.entrata,p.uscita);
                       const wd = new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
+                      const isRisto = (dip.ruolo||"bar")==="risto";
                       return (
                         <div key={d} style={{background:"var(--cp-bg4)",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"var(--cp-border)"}`}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                             <span style={{fontSize:12,fontWeight:800,color:"var(--cp-text)"}}>{wd} {d}</span>
-                            <select value={p.tipo} onChange={e=>updPresenza(selDip,d,"tipo",e.target.value)}
-                              style={{background:"var(--cp-bg3)",color:TIPO_COLOR[p.tipo],border:"1px solid #1e293b",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
-                              {["lavoro","malattia","permesso","assenza","ferie"].map(t=><option key={t} value={t}>{TIPO_IT[t]}</option>)}
-                            </select>
+                            {!isRisto&&(
+                              <select value={p.tipo||"lavoro"} onChange={e=>updPresenza(selDip,d,"tipo",e.target.value)}
+                                style={{background:"var(--cp-bg3)",color:TIPO_COLOR[p.tipo||"lavoro"],border:"1px solid var(--cp-border)",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
+                                {["lavoro","malattia","permesso","assenza","ferie"].map(t=><option key={t} value={t}>{TIPO_IT[t]}</option>)}
+                              </select>
+                            )}
                           </div>
-                          {p.tipo==="lavoro"&&(
+                          {isRisto ? (
+                            <Row>
+                              <label style={{flex:1,display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+                                background:p.turno_pranzo?"#052e16":"var(--cp-bg3)",borderRadius:8,padding:"10px 12px",
+                                border:`2px solid ${p.turno_pranzo?"#4ade80":"var(--cp-border)"}`,transition:"all 0.15s"}}>
+                                <input type="checkbox" checked={!!p.turno_pranzo}
+                                  onChange={e=>updPresenza(selDip,d,"turno_pranzo",e.target.checked)}
+                                  style={{width:16,height:16,cursor:"pointer"}}/>
+                                <span style={{fontSize:13,fontWeight:700,color:p.turno_pranzo?"#4ade80":"var(--cp-text3)"}}>☀️ Turno Pranzo</span>
+                              </label>
+                              <label style={{flex:1,display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+                                background:p.turno_cena?"#052e16":"var(--cp-bg3)",borderRadius:8,padding:"10px 12px",
+                                border:`2px solid ${p.turno_cena?"#4ade80":"var(--cp-border)"}`,transition:"all 0.15s"}}>
+                                <input type="checkbox" checked={!!p.turno_cena}
+                                  onChange={e=>updPresenza(selDip,d,"turno_cena",e.target.checked)}
+                                  style={{width:16,height:16,cursor:"pointer"}}/>
+                                <span style={{fontSize:13,fontWeight:700,color:p.turno_cena?"#4ade80":"var(--cp-text3)"}}>🌙 Turno Cena</span>
+                              </label>
+                            </Row>
+                          ) : (p.tipo==="lavoro"||!p.tipo)&&(
                             <Row>
                               <div style={{flex:1}}><Lbl c="Entrata"/><Inp val={p.entrata} set={v=>updPresenza(selDip,d,"entrata",v)} type="text" ph="08:00" isTime={true}/></div>
                               <div style={{flex:1}}><Lbl c="Uscita"/><Inp val={p.uscita} set={v=>updPresenza(selDip,d,"uscita",v)} type="text" ph="16:00" isTime={true}/></div>
                               <div style={{flex:1}}>
-                                <Lbl c="Ore"/>
-                                <div style={{background:"#0a0f1a",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:"#4ade80"}}>{ore.toFixed(1)}h</div>
+                                <Lbl c="Ore auto"/>
+                                <div style={{background:"var(--cp-bg4)",border:"1px solid var(--cp-border)",borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:"#4ade80"}}>{ore.toFixed(1)}h</div>
                               </div>
+                              <Fld label="Ore manuali" val={p.ore_manuali} set={v=>updPresenza(selDip,d,"ore_manuali",v)} ph="sovrascrive"/>
                             </Row>
                           )}
                           <Row>
