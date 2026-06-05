@@ -235,7 +235,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
 
   // ── RENDER ──
   const DOT_ON  = role === "dipendente" ? "#60a5fa" : "#4ade80";
-  const DOT_OFF = "#1e293b";
+  const DOT_OFF = "var(--cp-border)";
 
   const renderDots = (arr) => (
     <div style={{display:"flex",gap:12,justifyContent:"center",margin:"18px 0"}}>
@@ -254,8 +254,8 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
           onKeyDown={e=>handleKey(arr,setArr,arrRefs,i,e)}
           onFocus={e=>e.target.select()}
           style={{width:44,height:54,textAlign:"center",fontSize:22,fontWeight:700,
-            background:"#080e1c",color:"#e2e8f0",
-            border:`2px solid ${d?DOT_ON:"#1e293b"}`,
+            background:"var(--cp-bg4)",color:"var(--cp-text)",
+            border:`2px solid ${d?DOT_ON:"var(--cp-border)"}`,
             borderRadius:10,outline:"none",caretColor:"transparent",
             fontFamily:"inherit",transition:"border 0.15s",opacity:active?1:0.4}}/>
       ))}
@@ -265,15 +265,15 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
   // ── SCHERMATA SCELTA RUOLO ──
   if (mode === "choose_role") {
     return (
-      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+      <div style={{minHeight:"100vh",background:"var(--cp-bg)",display:"flex",flexDirection:"column",
         alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
-        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+        <div style={{background:"var(--cp-bg2)",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
           border:"1px solid #1e293b",boxShadow:"0 0 60px #4ade8011"}}>
           <div style={{textAlign:"center",marginBottom:28}}>
             <div style={{fontSize:22,fontWeight:900,letterSpacing:3,color:"#f8fafc",
               fontFamily:"Georgia,'Times New Roman',serif",marginBottom:2}}>La Lanterna</div>
             <div style={{fontSize:9,color:"#334155",letterSpacing:4}}>CASSA PRO</div>
-            <div style={{fontSize:11,color:"#475569",letterSpacing:1,marginTop:8}}>CHI SEI?</div>
+            <div style={{fontSize:11,color:"var(--cp-text4)",letterSpacing:1,marginTop:8}}>CHI SEI?</div>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:12}}>
             <button onClick={()=>onSuccess("admin")} style={{
@@ -285,7 +285,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
               <div style={{fontSize:11,color:"#4ade8088",fontWeight:400,marginTop:2}}>Accesso completo all'app</div>
             </button>
             <button onClick={()=>onSuccess("dipendente")} style={{
-              background:"#0a1020",color:"#60a5fa",border:"2px solid #1e3a5f",
+              background:"var(--cp-bg2)",color:"#60a5fa",border:"2px solid #1e3a5f",
               borderRadius:12,padding:"18px 16px",fontSize:14,fontWeight:700,
               cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
               <div style={{fontSize:20,marginBottom:4}}>👤</div>
@@ -296,7 +296,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
               <div style={{background:"#1a0a00",border:"1px solid #713f12",borderRadius:10,
                 padding:"10px 14px",fontSize:12,color:"#f97316",fontWeight:700,textAlign:"center"}}>
                 ⚠️ Nessun PIN dipendente impostato.<br/>
-                <span style={{fontWeight:400,color:"#94a3b8"}}>Chiedi al titolare di configurarlo.</span>
+                <span style={{fontWeight:400,color:"var(--cp-text2)"}}>Chiedi al titolare di configurarlo.</span>
               </div>
             )}
           </div>
@@ -308,18 +308,18 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
   // ── SCHERMATA RECOVERY ──
   if (mode === "recovery") {
     return (
-      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+      <div style={{minHeight:"100vh",background:"var(--cp-bg)",display:"flex",flexDirection:"column",
         alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
-        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+        <div style={{background:"var(--cp-bg2)",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
           border:"1px solid #7c2d12",boxShadow:"0 0 60px #f9731611"}}>
           <div style={{textAlign:"center",marginBottom:20}}>
             <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
             <div style={{fontSize:14,fontWeight:700,color:"#f97316",marginBottom:8}}>🔑 RECUPERO ACCESSO</div>
-            <div style={{fontSize:11,color:"#64748b"}}>Inserisci il codice di emergenza che hai salvato al momento del setup</div>
+            <div style={{fontSize:11,color:"var(--cp-text3)"}}>Inserisci il codice di emergenza che hai salvato al momento del setup</div>
           </div>
           <input type="text" value={recoveryInput} onChange={e=>setRecoveryInput(e.target.value.toUpperCase())}
             placeholder="es. ABCD23-EFGH45-IJKL67-MNPQ89"
-            style={{width:"100%",background:"#080e1c",color:"#f97316",border:"1px solid #7c2d12",
+            style={{width:"100%",background:"var(--cp-bg4)",color:"#f97316",border:"1px solid #7c2d12",
               borderRadius:8,padding:"12px 14px",fontSize:13,fontFamily:"inherit",
               boxSizing:"border-box",letterSpacing:1,marginBottom:8}}/>
           {error&&<div style={{color:"#f87171",fontSize:12,textAlign:"center",marginBottom:8}}>{error}</div>}
@@ -330,7 +330,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
                 opacity:recoveryInput.length<10?0.5:1}}>
               Reimposta accesso
             </button>
-            {onCancel&&<button onClick={onCancel} style={{width:"100%",background:"transparent",color:"#475569",
+            {onCancel&&<button onClick={onCancel} style={{width:"100%",background:"transparent",color:"var(--cp-text4)",
               border:"1px solid #1e293b",borderRadius:10,padding:11,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               Annulla
             </button>}
@@ -343,26 +343,26 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
   // ── SHOW RECOVERY CODE dopo setup ──
   if (step === "show_recovery") {
     return (
-      <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+      <div style={{minHeight:"100vh",background:"var(--cp-bg)",display:"flex",flexDirection:"column",
         alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
-        <div style={{background:"#0d1526",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
+        <div style={{background:"var(--cp-bg2)",borderRadius:20,padding:"36px 28px",maxWidth:380,width:"100%",
           border:"2px solid #f97316",boxShadow:"0 0 60px #f9731622"}}>
           <div style={{textAlign:"center",marginBottom:20}}>
             <div style={{fontSize:18,fontWeight:800,letterSpacing:2,color:"#f8fafc",marginBottom:4}}>◈ CASSA PRO</div>
             <div style={{fontSize:14,fontWeight:700,color:"#f97316",marginBottom:8}}>🔑 CODICE DI EMERGENZA</div>
-            <div style={{fontSize:11,color:"#94a3b8",lineHeight:1.6}}>
+            <div style={{fontSize:11,color:"var(--cp-text2)",lineHeight:1.6}}>
               <b style={{color:"#fbbf24"}}>SALVALO ORA</b> — screenshot, notes, carta.<br/>
               Senza questo codice, se dimentichi il PIN admin non puoi più accedere.
             </div>
           </div>
-          <div style={{background:"#080e1c",border:"2px dashed #f97316",borderRadius:12,padding:"18px 14px",
+          <div style={{background:"var(--cp-bg4)",border:"2px dashed #f97316",borderRadius:12,padding:"18px 14px",
             textAlign:"center",marginBottom:20}}>
             <div style={{fontSize:18,fontWeight:800,letterSpacing:3,color:"#fb923c",fontFamily:"monospace"}}>
               {recoveryCode}
             </div>
           </div>
           <button onClick={()=>{ setSession("admin"); onSuccess("admin"); }}
-            style={{width:"100%",background:"#14532d",color:"#4ade80",border:"1px solid #166534",
+            style={{width:"100%",background:"var(--cp-bg3)",color:"#4ade80",border:"1px solid #166534",
               borderRadius:10,padding:14,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
             ✅ L'ho salvato — Entra
           </button>
@@ -388,13 +388,13 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
   };
 
   const accentColor = role==="dipendente" ? "#60a5fa" : "#4ade80";
-  const borderColor = role==="dipendente" ? "#1e3a5f" : "#166534";
-  const bgColor     = role==="dipendente" ? "#0a1020" : "#14532d";
+  const borderColor = role==="dipendente" ? "var(--cp-border2)" : "#166534";
+  const bgColor     = role==="dipendente" ? "var(--cp-bg2)" : "var(--cp-bg3)";
 
   return (
-    <div style={{minHeight:"100vh",background:"#05090f",display:"flex",flexDirection:"column",
+    <div style={{minHeight:"100vh",background:"var(--cp-bg)",display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"center",fontFamily:"'DM Mono','Courier New',monospace",padding:24}}>
-      <div style={{background:"#0d1526",borderRadius:20,padding:"36px 32px 28px",maxWidth:380,width:"100%",
+      <div style={{background:"var(--cp-bg2)",borderRadius:20,padding:"36px 32px 28px",maxWidth:380,width:"100%",
         border:`1px solid ${borderColor}`,boxShadow:`0 0 60px ${accentColor}11`}}>
 
         {/* MODAL RESET EMERGENZA */}
@@ -403,7 +403,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
             alignItems:"center",justifyContent:"center",padding:24}}>
             <div style={{background:"#1a0505",border:"2px solid #f87171",borderRadius:16,padding:24,maxWidth:320,width:"100%"}}>
               <div style={{fontSize:15,fontWeight:800,color:"#f87171",marginBottom:8}}>⚠️ Reset Emergenza</div>
-              <div style={{fontSize:12,color:"#94a3b8",marginBottom:20,lineHeight:1.6}}>
+              <div style={{fontSize:12,color:"var(--cp-text2)",marginBottom:20,lineHeight:1.6}}>
                 Tutti i PIN verranno rimossi.<br/>
                 <b style={{color:"#fbbf24"}}>I dati NON verranno cancellati.</b>
               </div>
@@ -419,7 +419,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
                   Sì, resetta PIN
                 </button>
                 <button onClick={()=>setShowReset(false)}
-                  style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:8,
+                  style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:8,
                     padding:12,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
                   Annulla
                 </button>
@@ -445,7 +445,7 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
             <div style={{fontSize:9,color:"#334155",letterSpacing:4,marginTop:2}}>CASSA PRO</div>
           </div>
           <div style={{fontSize:13,fontWeight:700,color:accentColor,letterSpacing:1.5,marginBottom:6}}>{titleMap[mode]}</div>
-          <div style={{fontSize:11,color:"#64748b"}}>{subMap[mode]}</div>
+          <div style={{fontSize:11,color:"var(--cp-text3)"}}>{subMap[mode]}</div>
         </div>
 
         {lockout>0&&<div style={{textAlign:"center",color:"#f87171",fontSize:13,fontWeight:700,marginBottom:12}}>
@@ -479,13 +479,13 @@ function PINScreen({ mode, role, onSuccess, onCancel, onSwitchRole, onMatchDip, 
           {/* Dipendente: tasto indietro per tornare alla scelta ruolo */}
           {mode==="unlock"&&role==="dipendente"&&(
             <button onClick={()=>onCancel&&onCancel()} style={{width:"100%",background:"transparent",
-              color:"#475569",border:"1px solid #1e293b",borderRadius:10,padding:11,
+              color:"var(--cp-text4)",border:"1px solid #1e293b",borderRadius:10,padding:11,
               fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               ← Torna alla scelta ruolo
             </button>
           )}
           {onCancel&&typeof onCancel==="function"&&mode!=="unlock"&&(
-            <button onClick={()=>onCancel()} style={{width:"100%",background:"transparent",color:"#475569",
+            <button onClick={()=>onCancel()} style={{width:"100%",background:"transparent",color:"var(--cp-text4)",
               border:"1px solid #1e293b",borderRadius:10,padding:11,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               Annulla
             </button>
@@ -813,7 +813,7 @@ function calcDay(t) {
 }
 
 // UI atoms
-const Lbl = ({c}) => <div style={{fontSize:10,color:"#64748b",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>{c}</div>;
+const Lbl = ({c}) => <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:4}}>{c}</div>;
 const normTime = (t) => t.replace(/[;.,\s]/g,":").replace(/[^0-9:]/g,"");
 const normDec  = (v) => String(v??0).replace(/,/g,".");
 const Inp = ({val,set,type="number",ph,isTime=false}) => (
@@ -826,12 +826,12 @@ const Inp = ({val,set,type="number",ph,isTime=false}) => (
         ? (e=>{ const v=normDec(e.target.value); if(v!==e.target.value) set(v); })
         : undefined}
     placeholder={ph}
-    style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",borderRadius:7,padding:"9px 10px",fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}/>
+    style={{width:"100%",background:"var(--cp-inp)",color:"var(--cp-text)",border:"1px solid var(--cp-border)",borderRadius:7,padding:"9px 10px",fontSize:14,boxSizing:"border-box",fontFamily:"inherit"}}/>
 );
 const Calc = ({label,val,color}) => (
   <div style={{flex:"1 1 110px"}}>
     <Lbl c={label}/>
-    <div style={{background:"#080e1c",border:`1px solid ${color||"#1e3a5f"}`,borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:color||"#60a5fa"}}>{eur(val)}</div>
+    <div style={{background:"var(--cp-inp)",border:`1px solid ${color||"var(--cp-border2)"}`,borderRadius:7,padding:"9px 10px",fontSize:14,fontWeight:700,color:color||"#60a5fa"}}>{eur(val)}</div>
   </div>
 );
 const Fld = ({label,val,set,flex="1 1 110px",type="number",isTime=false}) => (
@@ -839,21 +839,21 @@ const Fld = ({label,val,set,flex="1 1 110px",type="number",isTime=false}) => (
 );
 const Row = ({children,mb=10}) => <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:mb}}>{children}</div>;
 const Block = ({title,accent,children}) => (
-  <div style={{background:"#0f1923",borderRadius:12,borderLeft:`4px solid ${accent}`,padding:"14px 14px 8px",marginBottom:14}}>
+  <div style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:`4px solid ${accent}`,padding:"14px 14px 8px",marginBottom:14}}>
     <div style={{fontSize:11,fontWeight:800,color:accent,letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>{title}</div>
     {children}
   </div>
 );
 const Stat = ({label,val,accent,big}) => (
-  <div style={{background:"#0f1923",borderRadius:10,borderTop:`3px solid ${accent}`,padding:"12px 14px",flex:"1 1 140px"}}>
-    <div style={{fontSize:10,color:"#64748b",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
+  <div style={{background:"var(--cp-bg3)",borderRadius:10,borderTop:`3px solid ${accent}`,padding:"12px 14px",flex:"1 1 140px"}}>
+    <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>{label}</div>
     <div style={{fontSize:big?20:15,fontWeight:800,color:accent,fontVariantNumeric:"tabular-nums"}}>{val}</div>
   </div>
 );
 const RRow = ({label,val,color,bold}) => (
-  <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid #080e1c",fontSize:bold?14:12,fontWeight:bold?800:400}}>
-    <span style={{color:bold?"#e2e8f0":"#94a3b8"}}>{label}</span>
-    <span style={{color:color||"#e2e8f0",fontWeight:700}}>{val}</span>
+  <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid var(--cp-bg4)",fontSize:bold?14:12,fontWeight:bold?800:400}}>
+    <span style={{color:bold?"var(--cp-text)":"var(--cp-text2)"}}>{label}</span>
+    <span style={{color:color||"var(--cp-text)",fontWeight:700}}>{val}</span>
   </div>
 );
 
@@ -863,7 +863,6 @@ const TABS = [
   {id:"slot",label:"🕹️ Slot"},
   {id:"cassa",label:"🏦 Cassa"},
   {id:"spese",label:"📋 Spese"},
-  {id:"debiti",label:"🔴 Debiti"},
   {id:"versamenti",label:"🏛️ Versamenti"},
   {id:"aggi",label:"📑 Aggi"},
   {id:"personale",label:"👥 Personale"},
@@ -905,7 +904,7 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
 
   const dip = (personale.dipendenti||[])[dipIdx];
   if (!dip) return (
-    <div style={{minHeight:"100vh",background:"#05090f",display:"flex",alignItems:"center",
+    <div style={{minHeight:"100vh",background:"var(--cp-bg)",display:"flex",alignItems:"center",
       justifyContent:"center",color:"#f87171",fontFamily:"'DM Mono','Courier New',monospace",fontSize:13}}>
       Dipendente non trovato. <button onClick={onLock} style={{marginLeft:12,background:"none",color:"#60a5fa",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Esci</button>
     </div>
@@ -916,11 +915,11 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
   const locked = isPast; // giorni passati: sola lettura
 
   return (
-    <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",
+    <div style={{minHeight:"100vh",background:"var(--cp-bg)",color:"var(--cp-text)",
       fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
 
       {/* HEADER */}
-      <div style={{background:"linear-gradient(180deg,#0a1520 0%,#05090f 100%)",padding:"18px 16px 12px",
+      <div style={{background:"var(--cp-header)",padding:"18px 16px 12px",
         position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e3a5f"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
@@ -928,8 +927,8 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
             <div style={{fontSize:11,color:"#60a5fa88"}}>{dip.nome}</div>
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {flash&&<span style={{background:"#0a1a2a",color:"#60a5fa",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
-            <button onClick={onLock} style={{background:"#0a1020",color:"#60a5fa",
+            {flash&&<span style={{background:"var(--cp-bg2)",color:"#60a5fa",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            <button onClick={onLock} style={{background:"var(--cp-bg2)",color:"#60a5fa",
               border:"1px solid #1e3a5f",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               🔒 Esci
             </button>
@@ -943,7 +942,7 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
             {val:day,set:setDay,opts:Array.from({length:days},(_,i)=>({v:i+1,l:i+1}))},
           ].map((s,i)=>(
             <select key={i} value={s.val} onChange={e=>s.set(+e.target.value)}
-              style={{flex:1,background:"#0d1526",color:"#e2e8f0",border:"1px solid #1e3a5f",
+              style={{flex:1,background:"var(--cp-bg2)",color:"var(--cp-text)",border:"1px solid #1e3a5f",
                 padding:"7px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit"}}>
               {s.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
@@ -962,19 +961,19 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
         )}
 
         {/* Card inserimento presenze */}
-        <div style={{background:"#0f1923",borderRadius:14,borderLeft:`4px solid ${locked?"#334155":"#60a5fa"}`,
+        <div style={{background:"var(--cp-bg3)",borderRadius:14,borderLeft:`4px solid ${locked?"#334155":"#60a5fa"}`,
           padding:16,marginBottom:14,opacity:locked?0.8:1}}>
-          <div style={{fontSize:11,color:locked?"#475569":"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:12}}>
+          <div style={{fontSize:11,color:locked?"var(--cp-text4)":"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:12}}>
             {String(day).padStart(2,"0")}/{String(month+1).padStart(2,"0")}/{year}
-            {isToday&&<span style={{marginLeft:8,background:"#0a1a2a",color:"#4ade80",padding:"2px 8px",borderRadius:10,fontSize:10}}>OGGI</span>}
+            {isToday&&<span style={{marginLeft:8,background:"var(--cp-bg2)",color:"#4ade80",padding:"2px 8px",borderRadius:10,fontSize:10}}>OGGI</span>}
           </div>
 
           {/* Tipo giornata */}
           <div style={{marginBottom:12}}>
-            <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
+            <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>TIPO GIORNATA</div>
             <select value={p.tipo||"lavoro"} disabled={locked}
               onChange={e=>updP(dipIdx,day,"tipo",e.target.value)}
-              style={{width:"100%",background:"#080e1c",color:locked?"#475569":TIPO_COLOR[p.tipo||"lavoro"],
+              style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":TIPO_COLOR[p.tipo||"lavoro"],
                 border:"1px solid #1e293b",padding:"10px 12px",borderRadius:8,
                 fontSize:13,fontFamily:"inherit",fontWeight:700,
                 cursor:locked?"not-allowed":"pointer"}}>
@@ -990,7 +989,7 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
                 {label:"USCITA", field:"uscita", ph:"16:00"},
               ].map(({label,field,ph})=>(
                 <div key={field} style={{flex:1}}>
-                  <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>{label}</div>
+                  <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>{label}</div>
                   <input type="text" value={p[field]||""} disabled={locked}
                     onChange={e=>updP(dipIdx,day,field,e.target.value)}
                     onBlur={e=>{
@@ -999,15 +998,15 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
                       if (v !== e.target.value) updP(dipIdx,day,field,v);
                     }}
                     placeholder={ph}
-                    style={{width:"100%",background:"#080e1c",color:locked?"#475569":"#e2e8f0",
-                      border:`1px solid ${locked?"#0f1923":"#1e293b"}`,borderRadius:7,
+                    style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":"var(--cp-text)",
+                      border:`1px solid ${locked?"var(--cp-bg3)":"var(--cp-border)"}`,borderRadius:7,
                       padding:"10px",fontSize:16,fontFamily:"inherit",boxSizing:"border-box",
                       cursor:locked?"not-allowed":"text"}}/>
                 </div>
               ))}
               <div style={{flex:1}}>
-                <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>ORE</div>
-                <div style={{background:"#080e1c",border:"1px solid #1e293b",borderRadius:7,
+                <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>ORE</div>
+                <div style={{background:"var(--cp-bg4)",border:"1px solid #1e293b",borderRadius:7,
                   padding:"10px",fontSize:16,fontWeight:800,color:"#4ade80",textAlign:"center"}}>
                   {ore.toFixed(1)}h
                 </div>
@@ -1017,20 +1016,20 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
 
           {/* Note */}
           <div>
-            <div style={{fontSize:10,color:"#64748b",fontWeight:700,marginBottom:4}}>NOTE</div>
+            <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700,marginBottom:4}}>NOTE</div>
             <input type="text" value={p.nota||""} disabled={locked}
               onChange={e=>updP(dipIdx,day,"nota",e.target.value)}
               placeholder="Note..."
-              style={{width:"100%",background:"#080e1c",color:locked?"#475569":"#e2e8f0",
-                border:`1px solid ${locked?"#0f1923":"#1e293b"}`,borderRadius:7,
+              style={{width:"100%",background:"var(--cp-bg4)",color:locked?"var(--cp-text4)":"var(--cp-text)",
+                border:`1px solid ${locked?"var(--cp-bg3)":"var(--cp-border)"}`,borderRadius:7,
                 padding:"10px",fontSize:13,fontFamily:"inherit",boxSizing:"border-box",
                 cursor:locked?"not-allowed":"text"}}/>
           </div>
         </div>
 
         {/* Storico mese */}
-        <div style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
-          <div style={{fontSize:11,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:10}}>
+        <div style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:"4px solid #334155",padding:14}}>
+          <div style={{fontSize:11,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:10}}>
             STORICO — {MONTHS[month]} {year}
           </div>
           {Array.from({length:days},(_,gi)=>{
@@ -1045,8 +1044,8 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
               <div key={d} onClick={()=>setDay(d)}
                 style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",
                   borderBottom:"1px solid #080e1c",fontSize:12,cursor:"pointer",
-                  background:isTod?"#0a1a2a":"transparent",borderRadius:isTod?4:0}}>
-                <span style={{color:isTod?"#60a5fa":"#64748b"}}>{wd} {d}{isTod?" 📍":""}</span>
+                  background:isTod?"var(--cp-bg2)":"transparent",borderRadius:isTod?4:0}}>
+                <span style={{color:isTod?"#60a5fa":"var(--cp-text3)"}}>{wd} {d}{isTod?" 📍":""}</span>
                 <span style={{color:TIPO_COLOR[pp.tipo||"lavoro"],fontWeight:700}}>
                   {pp.tipo&&pp.tipo!=="lavoro" ? TIPO_IT[pp.tipo] : `${oo.toFixed(1)}h`}
                   {pp.entrata&&` (${pp.entrata}–${pp.uscita||"?"})`}
@@ -1148,14 +1147,56 @@ export default function App() {
   }, []);
   const [year, setYear] = useState(now.getFullYear());
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("cassapro_theme") !== "light");
-  const T = darkMode ? {
-    bg:"#05090f", bg2:"#0d1526", bg3:"#0f1923", bg4:"#080e1c",
-    border:"#1e293b", border2:"#1e3a5f", text:"#e2e8f0", text2:"#94a3b8",
-    text3:"#64748b", text4:"#475569", header:"#0a1520"
-  } : {
-    bg:"#f1f5f9", bg2:"#ffffff", bg3:"#f8fafc", bg4:"#e2e8f0",
-    border:"#cbd5e1", border2:"#93c5fd", text:"#0f172a", text2:"#334155",
-    text3:"#475569", text4:"#64748b", header:"#ffffff"
+
+  // Applica tema come CSS variables globali — copre TUTTI i componenti
+  useEffect(() => {
+    const r = document.documentElement;
+    if (darkMode) {
+      r.style.setProperty("--cp-bg",      "var(--cp-bg)");
+      r.style.setProperty("--cp-bg2",     "var(--cp-bg2)");
+      r.style.setProperty("--cp-bg3",     "var(--cp-bg3)");
+      r.style.setProperty("--cp-bg4",     "var(--cp-bg4)");
+      r.style.setProperty("--cp-border",  "var(--cp-border)");
+      r.style.setProperty("--cp-border2", "var(--cp-border2)");
+      r.style.setProperty("--cp-text",    "var(--cp-text)");
+      r.style.setProperty("--cp-text2",   "var(--cp-text2)");
+      r.style.setProperty("--cp-text3",   "var(--cp-text3)");
+      r.style.setProperty("--cp-text4",   "var(--cp-text4)");
+      r.style.setProperty("--cp-header",  "var(--cp-header)");
+      r.style.setProperty("--cp-inp",     "var(--cp-bg4)");
+      r.style.setProperty("--cp-sel",     "var(--cp-bg4)");
+    } else {
+      r.style.setProperty("--cp-bg",      "#f1f5f9");
+      r.style.setProperty("--cp-bg2",     "#ffffff");
+      r.style.setProperty("--cp-bg3",     "#f8fafc");
+      r.style.setProperty("--cp-bg4",     "var(--cp-text)");
+      r.style.setProperty("--cp-border",  "#cbd5e1");
+      r.style.setProperty("--cp-border2", "#93c5fd");
+      r.style.setProperty("--cp-text",    "#0f172a");
+      r.style.setProperty("--cp-text2",   "#334155");
+      r.style.setProperty("--cp-text3",   "var(--cp-text4)");
+      r.style.setProperty("--cp-text4",   "var(--cp-text3)");
+      r.style.setProperty("--cp-header",  "#ffffff");
+      r.style.setProperty("--cp-inp",     "#f1f5f9");
+      r.style.setProperty("--cp-sel",     "#f1f5f9");
+    }
+    document.body.style.background = darkMode ? "var(--cp-bg)" : "#f1f5f9";
+  }, [darkMode]);
+
+  const T = {
+    bg:     "var(--cp-bg)",
+    bg2:    "var(--cp-bg2)",
+    bg3:    "var(--cp-bg3)",
+    bg4:    "var(--cp-bg4)",
+    border: "var(--cp-border)",
+    border2:"var(--cp-border2)",
+    text:   "var(--cp-text)",
+    text2:  "var(--cp-text2)",
+    text3:  "var(--cp-text3)",
+    text4:  "var(--cp-text4)",
+    header: "var(--cp-header)",
+    inp:    "var(--cp-inp)",
+    sel:    "var(--cp-sel)",
   };
   const [month, setMonth] = useState(now.getMonth());
   const [day, setDay] = useState(now.getDate());
@@ -1497,7 +1538,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
 
       {/* HEADER */}
-      <div style={{background:"linear-gradient(180deg,#0d1526 0%,#05090f 100%)",padding:"18px 16px 10px",position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e293b"}}>
+      <div style={{background:"var(--cp-header)",padding:"18px 16px 10px",position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e293b"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div>
             <div style={{fontSize:16,fontWeight:900,letterSpacing:2,color:"#f8fafc",
@@ -1505,7 +1546,7 @@ export default function App() {
             <div style={{fontSize:9,color:"#334155",letterSpacing:2}}>CASSA PRO</div>
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            {flash&&<span style={{background:"var(--cp-bg3)",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
             {/* Pulsante tema */}
             <button onClick={()=>{ const nd=!darkMode; setDarkMode(nd); localStorage.setItem("cassapro_theme",nd?"dark":"light"); }}
               title="Cambia tema"
@@ -1522,11 +1563,11 @@ export default function App() {
                 }
               }}
               title={hasAdminPIN() ? "Blocca app" : "Imposta PIN"}
-              style={{background:"#1e293b",color: hasAdminPIN() ? "#fbbf24" : "#475569",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              style={{background:"var(--cp-border)",color: hasAdminPIN() ? "#fbbf24" : "var(--cp-text4)",border:"1px solid #334155",padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
               {hasAdminPIN() ? "🔒" : "🔓"}
             </button>
             <button onClick={()=>setView(v=>v==="day"?"month":v==="month"?"annual":"day")}
-              style={{background:"#1e293b",color:"#94a3b8",border:"1px solid #334155",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+              style={{background:"var(--cp-border)",color:"var(--cp-text2)",border:"1px solid #334155",padding:"6px 12px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
               {view==="day"?"MESE ▸":view==="month"?"ANNO ▸":"◂ GIORNO"}
             </button>
           </div>
@@ -1538,7 +1579,7 @@ export default function App() {
             ...(view==="day"?[{val:day,set:setDay,opts:Array.from({length:days},(_,i)=>({v:i+1,l:i+1}))}]:[]),
           ].map((s,i)=>(
             <select key={i} value={s.val} onChange={e=>s.set(+e.target.value)}
-              style={{flex:1,background:"#0d1526",color:"#e2e8f0",border:"1px solid #1e293b",padding:"7px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit"}}>
+              style={{flex:1,background:"var(--cp-bg2)",color:"var(--cp-text)",border:"1px solid #1e293b",padding:"7px 8px",borderRadius:8,fontSize:12,fontFamily:"inherit"}}>
               {s.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
             </select>
           ))}
@@ -1555,7 +1596,7 @@ export default function App() {
                 {p.tipo==="scaduto"?"🔴":p.tipo==="oggi"?"🟡":"🟠"} {p.testo}
                 {p.importo ? ` — ${p.importo}€` : ""}
               </span>
-              <span style={{color:"#64748b",fontSize:11}}>
+              <span style={{color:"var(--cp-text3)",fontSize:11}}>
                 {p.tipo==="scaduto" ? `Scaduto ${Math.abs(p.diff)}gg fa` : p.tipo==="oggi" ? "Oggi!" : `Tra ${p.diff}gg`}
               </span>
             </div>
@@ -1576,8 +1617,8 @@ export default function App() {
             <Stat label="POS Bar mese" val={eur(mPosMensile)} accent="#a78bfa"/>
             <Stat label="Spese mese" val={eur(mSpeseMensili)} accent="#f87171"/>
           </div>
-          <div style={{background:"#0f1923",borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 1fr",padding:"10px 14px",background:"#080e1c",fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1,gap:6}}>
+          <div style={{background:"var(--cp-bg3)",borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 1fr",padding:"10px 14px",background:"var(--cp-bg4)",fontSize:9,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,gap:6}}>
               <span>G</span><span>MOV.</span><span>SPESE</span><span>GUAD.</span><span>CASSA</span>
             </div>
             {(() => {
@@ -1588,11 +1629,11 @@ export default function App() {
                 return (
                   <div key={d} onClick={()=>{setDay(d);setView("day");}}
                     style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 1fr",padding:"10px 14px",fontSize:12,borderBottom:"1px solid #080e1c",gap:6,cursor:"pointer",opacity:reale?1:0.3}}>
-                    <span style={{color:"#64748b",fontWeight:800}}>{d}</span>
+                    <span style={{color:"var(--cp-text3)",fontWeight:800}}>{d}</span>
                     <span style={{color:"#4ade80"}}>{reale?eur(c.movimento):"—"}</span>
                     <span style={{color:"#f87171"}}>{reale?eur(c.spese_cont+c.spese_ele):"—"}</span>
-                    <span style={{color:reale?ec(c.guadagno):"#475569",fontWeight:700}}>{reale?eur(c.guadagno):"—"}</span>
-                    <span style={{color:reale?ec(cumulativo):"#475569",fontWeight:700}}>{reale?eur(cumulativo):"—"}</span>
+                    <span style={{color:reale?ec(c.guadagno):"var(--cp-text4)",fontWeight:700}}>{reale?eur(c.guadagno):"—"}</span>
+                    <span style={{color:reale?ec(cumulativo):"var(--cp-text4)",fontWeight:700}}>{reale?eur(cumulativo):"—"}</span>
                   </div>
                 );
               });
@@ -1628,7 +1669,7 @@ export default function App() {
         return (
           <div style={{padding:16}}>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>📅 Anno {year}</div>
-            <div style={{fontSize:11,color:"#475569",marginBottom:16}}>Riepilogo tutti i mesi</div>
+            <div style={{fontSize:11,color:"var(--cp-text4)",marginBottom:16}}>Riepilogo tutti i mesi</div>
 
             {/* KPI annuali */}
             <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:20}}>
@@ -1640,13 +1681,13 @@ export default function App() {
             </div>
 
             {/* Grafico a barre — Movimento */}
-            <div style={{background:"#0f1923",borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{background:"var(--cp-bg3)",borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:800,color:"#4ade80",letterSpacing:1,marginBottom:12}}>📊 MOVIMENTO MENSILE</div>
               {annualData.map(({mName,mi,mov,hasData})=>(
                 <div key={mi} onClick={()=>{setMonth(mi);setView("month");}}
                   style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer"}}>
-                  <div style={{width:30,fontSize:10,color:"#475569",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
-                  <div style={{flex:1,background:"#080e1c",borderRadius:4,height:20,overflow:"hidden"}}>
+                  <div style={{width:30,fontSize:10,color:"var(--cp-text4)",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
+                  <div style={{flex:1,background:"var(--cp-bg4)",borderRadius:4,height:20,overflow:"hidden"}}>
                     {hasData&&<div style={{width:`${Math.min(100,Math.abs(mov)/maxMov*100)}%`,height:"100%",
                       background:mov>=0?"#4ade80":"#f87171",borderRadius:4,
                       transition:"width 0.3s",minWidth:2}}/>}
@@ -1660,13 +1701,13 @@ export default function App() {
             </div>
 
             {/* Grafico a barre — Guadagno */}
-            <div style={{background:"#0f1923",borderRadius:12,padding:14,marginBottom:14}}>
+            <div style={{background:"var(--cp-bg3)",borderRadius:12,padding:14,marginBottom:14}}>
               <div style={{fontSize:11,fontWeight:800,color:"#60a5fa",letterSpacing:1,marginBottom:12}}>📊 GUADAGNO MENSILE</div>
               {annualData.map(({mName,mi,guad,aggi,hasData})=>(
                 <div key={mi} onClick={()=>{setMonth(mi);setView("month");}}
                   style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,cursor:"pointer"}}>
-                  <div style={{width:30,fontSize:10,color:"#475569",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
-                  <div style={{flex:1,background:"#080e1c",borderRadius:4,height:20,overflow:"hidden",position:"relative"}}>
+                  <div style={{width:30,fontSize:10,color:"var(--cp-text4)",fontWeight:700,flexShrink:0}}>{mName.slice(0,3)}</div>
+                  <div style={{flex:1,background:"var(--cp-bg4)",borderRadius:4,height:20,overflow:"hidden",position:"relative"}}>
                     {hasData&&<>
                       <div style={{width:`${Math.min(100,Math.abs(guad)/maxGuad*100)}%`,height:"100%",
                         background:"#60a5fa44",borderRadius:4,position:"absolute"}}/>
@@ -1684,9 +1725,9 @@ export default function App() {
             </div>
 
             {/* Tabella riepilogo mensile */}
-            <div style={{background:"#0f1923",borderRadius:12,overflow:"hidden",marginBottom:14}}>
+            <div style={{background:"var(--cp-bg3)",borderRadius:12,overflow:"hidden",marginBottom:14}}>
               <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
-                padding:"10px 12px",background:"#080e1c",fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1,gap:4}}>
+                padding:"10px 12px",background:"var(--cp-bg4)",fontSize:9,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,gap:4}}>
                 <span>MESE</span><span>MOV.</span><span>GUAD.</span><span>AGGI</span><span>VERSATO</span>
               </div>
               {annualData.map(({mName,mi,mov,guad,versato,aggi,hasData})=>(
@@ -1694,16 +1735,16 @@ export default function App() {
                   style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
                     padding:"10px 12px",fontSize:11,borderBottom:"1px solid #080e1c",
                     gap:4,cursor:"pointer",opacity:hasData?1:0.3}}>
-                  <span style={{color:"#64748b",fontWeight:800}}>{mName.slice(0,3)}</span>
+                  <span style={{color:"var(--cp-text3)",fontWeight:800}}>{mName.slice(0,3)}</span>
                   <span style={{color:"#4ade80"}}>{hasData?eur(mov):"—"}</span>
-                  <span style={{color:hasData?(guad>=0?"#60a5fa":"#f87171"):"#475569",fontWeight:700}}>{hasData?eur(guad):"—"}</span>
+                  <span style={{color:hasData?(guad>=0?"#60a5fa":"#f87171"):"var(--cp-text4)",fontWeight:700}}>{hasData?eur(guad):"—"}</span>
                   <span style={{color:"#fbbf24"}}>{hasData&&aggi?eur(aggi):"—"}</span>
                   <span style={{color:"#f87171"}}>{versato?eur(versato):"—"}</span>
                 </div>
               ))}
               <div style={{display:"grid",gridTemplateColumns:"50px 1fr 1fr 1fr 1fr",
-                padding:"10px 12px",fontSize:11,gap:4,background:"#080e1c",fontWeight:800}}>
-                <span style={{color:"#e2e8f0"}}>TOT</span>
+                padding:"10px 12px",fontSize:11,gap:4,background:"var(--cp-bg4)",fontWeight:800}}>
+                <span style={{color:"var(--cp-text)"}}>TOT</span>
                 <span style={{color:"#4ade80"}}>{eur(totMov)}</span>
                 <span style={{color:totGuad>=0?"#60a5fa":"#f87171"}}>{eur(totGuad)}</span>
                 <span style={{color:"#fbbf24"}}>{eur(totAggiA)}</span>
@@ -1718,10 +1759,10 @@ export default function App() {
       {/* ── VISTA GIORNO ── */}
       {view==="day"&&(
         <>
-          <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #1e293b",background:"#05090f"}}>
+          <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #1e293b",background:"var(--cp-bg)"}}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{flex:"0 0 auto",padding:"12px 12px",background:"transparent",color:tab===t.id?"#e2e8f0":"#475569",border:"none",borderBottom:tab===t.id?"2px solid #4ade80":"2px solid transparent",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                style={{flex:"0 0 auto",padding:"12px 12px",background:"transparent",color:tab===t.id?"var(--cp-text)":"var(--cp-text4)",border:"none",borderBottom:tab===t.id?"2px solid #4ade80":"2px solid transparent",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
                 {t.label}
               </button>
             ))}
@@ -1740,7 +1781,7 @@ export default function App() {
               </Block>
               <Block title="Articoli Tabacchi" accent="#a3e635">
                 <Row><Fld label="Incasso Articoli (€)" val={today.art_tabacchi} set={v=>upd("art_tabacchi",v)}/></Row>
-                <div style={{fontSize:10,color:"#475569",marginBottom:6}}>↑ Entra nel movimento come il Bar</div>
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:6}}>↑ Entra nel movimento come il Bar</div>
               </Block>
               <Block title="Distributore Sigarette" accent="#f97316">
                 <Row>
@@ -1749,11 +1790,11 @@ export default function App() {
                 </Row>
                 <Row>
                   <Fld label="Slot POS (€)" val={today.dist_slot_pos} set={v=>upd("dist_slot_pos",v)}/>
-                  <div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"#475569"}}>📝 Solo annotazione — non incide sui conti</span></div>
+                  <div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"var(--cp-text4)"}}>📝 Solo annotazione — non incide sui conti</span></div>
                 </Row>
               </Block>
-              <Block title="Arrotondamento" accent="#94a3b8">
-                <Row><Fld label="± Arrotondamento (€)" val={today.arrotondamento} set={v=>upd("arrotondamento",v)}/><div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"#475569"}}>Valore ± per eliminare i decimali</span></div></Row>
+              <Block title="Arrotondamento" accent="var(--cp-text2)">
+                <Row><Fld label="± Arrotondamento (€)" val={today.arrotondamento} set={v=>upd("arrotondamento",v)}/><div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"var(--cp-text4)"}}>Valore ± per eliminare i decimali</span></div></Row>
               </Block>
             </>}
 
@@ -1766,7 +1807,7 @@ export default function App() {
                 <Row><Fld label="Venduto (€)" val={today.lotto_venduto} set={v=>upd("lotto_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.lotto_pagati} set={v=>upd("lotto_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.lotto_rim} color="#f97316"/></Row>
               </Block>
               <Block title="Scommesse / Virtual / LIS / SISAL / Valori" accent="#34d399">
-                <div style={{fontSize:10,color:"#475569",marginBottom:10}}>↓ Inserisci direttamente la rimanenza già calcolata</div>
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:10}}>↓ Inserisci direttamente la rimanenza già calcolata</div>
                 <Row><Fld label="Scommesse (€)" val={today.toto} set={v=>upd("toto",v)}/><Fld label="Virtual (€)" val={today.virtual} set={v=>upd("virtual",v)}/></Row>
                 <Row><Fld label="LIS (€)" val={today.lis} set={v=>upd("lis",v)}/><Fld label="SISAL (€)" val={today.sisal} set={v=>upd("sisal",v)}/><Fld label="Valori Bollati (€)" val={today.valori} set={v=>upd("valori",v)}/></Row>
               </Block>
@@ -1789,18 +1830,18 @@ export default function App() {
                   <Lbl c="Note Slot — solo annotazione, non incide sui conti"/>
                   <textarea value={today.slot_note||""} onChange={e=>upd("slot_note",e.target.value)}
                     placeholder="es. Slot 1: €200 ore 15:30, Slot 3: €150 ore 18:00..."
-                    style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",borderRadius:7,padding:10,fontSize:13,minHeight:80,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+                    style={{width:"100%",background:"var(--cp-bg4)",color:"var(--cp-text)",border:"1px solid #1e293b",borderRadius:7,padding:10,fontSize:13,minHeight:80,boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
                 </div>
               </Block>
             </>}
 
             {/* ── CASSA ── */}
             {tab==="cassa"&&<>
-              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginBottom:14,borderLeft:"4px solid #475569"}}>
-                <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:6}}>LOGICA PF / MONETE / DEBITI</div>
-                <div style={{fontSize:11,color:"#64748b",lineHeight:1.7}}>
-                  <b style={{color:"#e2e8f0"}}>Ieri</b> = precompilato automaticamente da ieri sera → si <b style={{color:"#4ade80"}}>somma</b><br/>
-                  <b style={{color:"#e2e8f0"}}>Domani</b> = quanto lasci stasera → si <b style={{color:"#f87171"}}>sottrae</b> e va automaticamente come "Ieri" di domani
+              <div style={{background:"var(--cp-bg3)",borderRadius:10,padding:12,marginBottom:14,borderLeft:"4px solid #475569"}}>
+                <div style={{fontSize:10,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:6}}>LOGICA PF / MONETE / DEBITI</div>
+                <div style={{fontSize:11,color:"var(--cp-text3)",lineHeight:1.7}}>
+                  <b style={{color:"var(--cp-text)"}}>Ieri</b> = precompilato automaticamente da ieri sera → si <b style={{color:"#4ade80"}}>somma</b><br/>
+                  <b style={{color:"var(--cp-text)"}}>Domani</b> = quanto lasci stasera → si <b style={{color:"#f87171"}}>sottrae</b> e va automaticamente come "Ieri" di domani
                 </div>
               </div>
               {[
@@ -1813,27 +1854,75 @@ export default function App() {
                     <Fld label="Domani (lascio stasera)" val={today[c.fDom]} set={v=>upd(c.fDom,v)}/>
                     <Calc label="Impatto movimento" val={c.diff} color={c.diff>=0?"#4ade80":"#f87171"}/>
                   </Row>
-                  <div style={{fontSize:10,color:"#475569",marginBottom:6}}>
+                  <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:6}}>
                     ↑ "Ieri" è precompilato automaticamente ma puoi modificarlo se necessario
                   </div>
                 </Block>
               ))}
-              {/* Debiti clienti — precompilato dal tab Debiti */}
+              {/* Debiti clienti — slot che sottrae/aggiunge movimento */}
               <Block title="Debiti Clienti" accent="#f87171">
+                <Row>
+                  <Fld label="Ieri (precompilato)" val={today.debiti_oggi} set={v=>upd("debiti_oggi",v)}/>
+                  <Fld label="Domani (aggiorna)" val={today.debiti_domani} set={v=>upd("debiti_domani",v)}/>
+                  <Calc label="Impatto movimento" val={calc.debiti_diff} color={calc.debiti_diff>=0?"#4ade80":"#f87171"}/>
+                </Row>
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:12}}>
+                  ↑ "Ieri" precompilato da ieri — "Domani" si porta al giorno dopo
+                </div>
+
+                {/* Lista debiti — solo anagrafica, non entra nei calcoli */}
                 {(()=>{
                   const debiti = all[dbk()] || [];
                   const totAperti = debiti.filter(d=>!d.pagato).reduce((s,d)=>s+n(d.importo),0);
+                  const saveDebiti = (lista) => { const u={...all,[dbk()]:lista}; setAll(u); persist(u); };
+                  const addDebito = () => saveDebiti([...debiti,{nome:"",importo:"",data:new Date().toLocaleDateString("it-IT"),pagato:false,dataPagato:""}]);
+                  const updDebito = (i,f,v) => { const d=[...debiti]; d[i]={...d[i],[f]:v}; saveDebiti(d); };
+                  const delDebito = (i) => saveDebiti(debiti.filter((_,j)=>j!==i));
+                  const flagPagato = (i) => {
+                    const d=[...debiti];
+                    d[i]={...d[i],pagato:!d[i].pagato,dataPagato:!d[i].pagato?new Date().toLocaleDateString("it-IT"):""};
+                    saveDebiti(d);
+                  };
                   return (<>
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>
-                      Totale debiti aperti dal tab Debiti: <b style={{color:"#f87171"}}>{eur(totAperti)}</b>
-                    </div>
-                    <Row>
-                      <Fld label="Ieri (precompilato)" val={today.debiti_oggi||String(totAperti||"")} set={v=>upd("debiti_oggi",v)}/>
-                      <Fld label="Domani (aggiorna)" val={today.debiti_domani} set={v=>upd("debiti_domani",v)}/>
-                      <Calc label="Impatto movimento" val={calc.debiti_diff} color={calc.debiti_diff>=0?"#4ade80":"#f87171"}/>
-                    </Row>
-                    <div style={{fontSize:10,color:"#475569"}}>
-                      Il totale si aggiorna automaticamente dal tab Debiti, ma puoi modificarlo manualmente
+                    <div style={{borderTop:"1px solid #1e293b",paddingTop:12,marginTop:4}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                        <span style={{fontSize:10,color:"#f87171",fontWeight:800,letterSpacing:1}}>REGISTRO DEBITI</span>
+                        <span style={{fontSize:12,color:"#f87171",fontWeight:800}}>Totale aperto: {eur(totAperti)}</span>
+                      </div>
+                      {debiti.length===0&&(
+                        <div style={{textAlign:"center",color:"var(--cp-text4)",padding:"16px 0",fontSize:12}}>Nessun debito registrato</div>
+                      )}
+                      {debiti.map((d,i)=>(
+                        <div key={i} style={{background:"var(--cp-bg4)",borderRadius:10,
+                          borderLeft:`3px solid ${d.pagato?"#4ade80":"#f87171"}`,
+                          padding:12,marginBottom:8,opacity:d.pagato?0.55:1}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                            <span style={{fontSize:10,fontWeight:800,color:d.pagato?"#4ade80":"#f87171"}}>
+                              {d.pagato?"✅ PAGATO":"🔴 APERTO"}
+                            </span>
+                            <div style={{display:"flex",gap:6}}>
+                              <button onClick={()=>flagPagato(i)}
+                                style={{background:d.pagato?"#052e16":"#450a0a",color:d.pagato?"#4ade80":"#f87171",
+                                  border:"none",borderRadius:5,padding:"3px 9px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                                {d.pagato?"↩ Riapri":"✓ Pagato"}
+                              </button>
+                              <button onClick={()=>delDebito(i)}
+                                style={{background:"var(--cp-border)",color:"var(--cp-text3)",border:"none",borderRadius:5,padding:"3px 7px",fontSize:11,cursor:"pointer"}}>✕</button>
+                            </div>
+                          </div>
+                          <Row>
+                            <div style={{flex:"2 1 130px"}}><Lbl c="Nome"/><Inp val={d.nome} set={v=>updDebito(i,"nome",v)} type="text" ph="Nome cliente"/></div>
+                            <Fld label="Importo €" val={d.importo} set={v=>updDebito(i,"importo",v)}/>
+                            <div style={{flex:"1 1 90px"}}><Lbl c="Data"/><Inp val={d.data} set={v=>updDebito(i,"data",v)} type="text" ph="gg/mm/aa"/></div>
+                          </Row>
+                          {d.pagato&&d.dataPagato&&<div style={{fontSize:10,color:"#4ade80",marginTop:4}}>Pagato il: {d.dataPagato}</div>}
+                        </div>
+                      ))}
+                      <button onClick={addDebito}
+                        style={{width:"100%",background:"#1a0505",color:"#f87171",border:"2px dashed #7f1d1d",
+                          borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>
+                        + Aggiungi debito
+                      </button>
                     </div>
                   </>);
                 })()}
@@ -1848,7 +1937,7 @@ export default function App() {
                 <Stat label="Totale spese" val={eur(calc.spese_tot)} accent="#f87171" big/>
               </div>
               {(today.spese||[]).map((sp,i)=>(
-                <div key={i} style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #f87171",padding:14,marginBottom:10}}>
+                <div key={i} style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:"4px solid #f87171",padding:14,marginBottom:10}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
                     <span style={{fontSize:10,color:"#f87171",fontWeight:800,letterSpacing:1}}>SPESA #{i+1}</span>
                     <button onClick={()=>delSpesa(i)} style={{background:"#450a0a",color:"#f87171",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
@@ -1858,7 +1947,7 @@ export default function App() {
                     <div style={{flex:"1 1 110px"}}>
                       <Lbl c="Tipo"/>
                       <select value={sp.tipo} onChange={e=>updSpesa(i,"tipo",e.target.value)}
-                        style={{width:"100%",background:"#080e1c",color:"#e2e8f0",border:"1px solid #1e293b",padding:"9px 10px",borderRadius:7,fontSize:13,fontFamily:"inherit"}}>
+                        style={{width:"100%",background:"var(--cp-bg4)",color:"var(--cp-text)",border:"1px solid #1e293b",padding:"9px 10px",borderRadius:7,fontSize:13,fontFamily:"inherit"}}>
                         <option value="merce">🛒 Merce</option>
                         <option value="fisso">🏢 Costo Fisso</option>
                       </select>
@@ -1874,74 +1963,6 @@ export default function App() {
               <button onClick={addSpesa} style={{width:"100%",background:"#1a0a0a",color:"#f87171",border:"1px dashed #7f1d1d",borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi Spesa</button>
             </>}
 
-            {/* ── DEBITI CLIENTI ── */}
-            {tab==="debiti"&&(()=>{
-              const debiti = all[dbk()] || [];
-              const totAperti = debiti.filter(d=>!d.pagato).reduce((s,d)=>s+n(d.importo),0);
-              const totPagati = debiti.filter(d=>d.pagato).reduce((s,d)=>s+n(d.importo),0);
-              const saveDebiti = (lista) => { const u={...all,[dbk()]:lista}; setAll(u); persist(u); };
-              const addDebito = () => saveDebiti([...debiti,{nome:"",importo:"",data:new Date().toLocaleDateString("it-IT"),pagato:false,dataPagato:""}]);
-              const updDebito = (i,f,v) => { const d=[...debiti]; d[i]={...d[i],[f]:v}; saveDebiti(d); };
-              const delDebito = (i) => saveDebiti(debiti.filter((_,j)=>j!==i));
-              const flagPagato = (i) => {
-                const d=[...debiti];
-                d[i]={...d[i],pagato:!d[i].pagato,dataPagato:!d[i].pagato?new Date().toLocaleDateString("it-IT"):""};
-                saveDebiti(d);
-              };
-              return (<>
-                <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14}}>
-                  <Stat label="Debiti aperti" val={eur(totAperti)} accent="#f87171" big/>
-                  <Stat label="Incassati" val={eur(totPagati)} accent="#4ade80"/>
-                </div>
-                {debiti.length===0&&(
-                  <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>
-                    Nessun debito registrato
-                  </div>
-                )}
-                {debiti.map((d,i)=>(
-                  <div key={i} style={{background:"#0f1923",borderRadius:12,
-                    borderLeft:`4px solid ${d.pagato?"#4ade80":"#f87171"}`,
-                    padding:14,marginBottom:10,opacity:d.pagato?0.6:1}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                      <span style={{fontSize:10,fontWeight:800,letterSpacing:1,
-                        color:d.pagato?"#4ade80":"#f87171"}}>
-                        {d.pagato?"✅ PAGATO":"🔴 APERTO"} #{i+1}
-                      </span>
-                      <div style={{display:"flex",gap:6}}>
-                        <button onClick={()=>flagPagato(i)}
-                          style={{background:d.pagato?"#052e16":"#450a0a",
-                            color:d.pagato?"#4ade80":"#f87171",
-                            border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
-                          {d.pagato?"↩ Riapri":"✓ Pagato"}
-                        </button>
-                        <button onClick={()=>delDebito(i)}
-                          style={{background:"#1e293b",color:"#64748b",border:"none",borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
-                      </div>
-                    </div>
-                    <Row>
-                      <div style={{flex:"2 1 140px"}}>
-                        <Lbl c="Nome cliente"/>
-                        <Inp val={d.nome} set={v=>updDebito(i,"nome",v)} type="text" ph="es. Mario Rossi"/>
-                      </div>
-                      <Fld label="Importo (€)" val={d.importo} set={v=>updDebito(i,"importo",v)}/>
-                      <div style={{flex:"1 1 110px"}}>
-                        <Lbl c="Data"/>
-                        <Inp val={d.data} set={v=>updDebito(i,"data",v)} type="text" ph="gg/mm/aaaa"/>
-                      </div>
-                    </Row>
-                    {d.pagato&&d.dataPagato&&(
-                      <div style={{fontSize:10,color:"#4ade80",marginTop:6}}>Pagato il: {d.dataPagato}</div>
-                    )}
-                  </div>
-                ))}
-                <button onClick={addDebito}
-                  style={{width:"100%",background:"#1a0505",color:"#f87171",border:"2px dashed #7f1d1d",
-                    borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>
-                  + Aggiungi debito
-                </button>
-              </>);
-            })()}
-
             {/* ── VERSAMENTI ── */}
             {tab==="versamenti"&&<>
               <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14}}>
@@ -1949,19 +1970,19 @@ export default function App() {
                 <Stat label="Totale versato" val={eur(totVersati)} accent="#f87171"/>
                 <Stat label="Cassa residua" val={eur(cassaOggi)} accent={cassaOggi>=0?"#4ade80":"#f87171"} big/>
               </div>
-              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginBottom:14,borderLeft:"4px solid #60a5fa"}}>
-                <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:4}}>COME FUNZIONA</div>
-                <div style={{fontSize:11,color:"#64748b",lineHeight:1.7}}>
+              <div style={{background:"var(--cp-bg3)",borderRadius:10,padding:12,marginBottom:14,borderLeft:"4px solid #60a5fa"}}>
+                <div style={{fontSize:10,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:4}}>COME FUNZIONA</div>
+                <div style={{fontSize:11,color:"var(--cp-text3)",lineHeight:1.7}}>
                   La cassa accumula i movimenti giornalieri dal mese precedente.<br/>
                   Ogni versamento in banca/cassa si <b style={{color:"#f87171"}}>sottrae</b> dal totale accumulato.<br/>
                   Il residuo si porta automaticamente al mese successivo.
                 </div>
               </div>
               {versamenti.map((v,i)=>(
-                <div key={i} style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:14,marginBottom:10}}>
+                <div key={i} style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:14,marginBottom:10}}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
                     <span style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1}}>VERSAMENTO #{i+1}</span>
-                    <button onClick={()=>delVersamento(i)} style={{background:"#0a1a2a",color:"#60a5fa",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                    <button onClick={()=>delVersamento(i)} style={{background:"var(--cp-bg2)",color:"#60a5fa",border:"none",borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
                   </div>
                   <Row>
                     <Fld label="Importo versato (€)" val={v.importo} set={val=>updVersamento(i,"importo",val)}/>
@@ -1970,19 +1991,19 @@ export default function App() {
                   <div><Lbl c="Note (es. versamento BCC, bonifico...)"/><Inp val={v.nota} set={val=>updVersamento(i,"nota",val)} type="text" ph="es. Versamento BCC €5000 — sportello"/></div>
                 </div>
               ))}
-              <button onClick={addVersamento} style={{width:"100%",background:"#0a1a2a",color:"#60a5fa",border:"1px dashed #1e3a5f",borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi Versamento</button>
+              <button onClick={addVersamento} style={{width:"100%",background:"var(--cp-bg2)",color:"#60a5fa",border:"1px dashed #1e3a5f",borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi Versamento</button>
             </>}
 
             {/* ── AGGI ── */}
             {tab==="aggi"&&<>
-              <div style={{fontSize:11,color:"#475569",marginBottom:14,lineHeight:1.6}}>Aggi di <b style={{color:"#e2e8f0"}}>{MONTHS[month]} {year}</b> — aggiungi una riga per ogni accredito ricevuto.</div>
+              <div style={{fontSize:11,color:"var(--cp-text4)",marginBottom:14,lineHeight:1.6}}>Aggi di <b style={{color:"var(--cp-text)"}}>{MONTHS[month]} {year}</b> — aggiungi una riga per ogni accredito ricevuto.</div>
               {[
                 {title:"Aggi Bar",accent:"#4ade80",voci:AGGI_BAR_VOCI,totale:totAggiBar,rowColor:"#a3e635"},
                 {title:"Aggi Tabacchi",accent:"#fb923c",voci:AGGI_TAB_VOCI,totale:totAggiTab,rowColor:"#fdba74"},
               ].map(gruppo=>(
                 <Block key={gruppo.title} title={gruppo.title} accent={gruppo.accent}>
                   <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
-                    <span style={{fontSize:11,color:"#64748b"}}>Totale</span>
+                    <span style={{fontSize:11,color:"var(--cp-text3)"}}>Totale</span>
                     <span style={{fontSize:16,fontWeight:800,color:gruppo.accent}}>{eur(gruppo.totale)}</span>
                   </div>
                   {gruppo.voci.map(voce=>(
@@ -1994,7 +2015,7 @@ export default function App() {
                         <div key={i} style={{display:"flex",gap:8,alignItems:"flex-end",marginBottom:6}}>
                           <div style={{flex:"1 1 90px"}}>{i===0&&<Lbl c="Importo (€)"/>}<Inp val={ag.importo} set={v=>updAggio(voce,i,"importo",v)}/></div>
                           <div style={{flex:"2 1 150px"}}>{i===0&&<Lbl c="Periodo"/>}<Inp val={ag.periodo} set={v=>updAggio(voce,i,"periodo",v)} type="text" ph="es. 01/09 - 07/09"/></div>
-                          <button onClick={()=>delAggio(voce,i)} style={{background:"#111",color:"#475569",border:"1px solid #1e293b",borderRadius:6,padding:"9px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>✕</button>
+                          <button onClick={()=>delAggio(voce,i)} style={{background:"#111",color:"var(--cp-text4)",border:"1px solid #1e293b",borderRadius:6,padding:"9px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>✕</button>
                         </div>
                       ))}
                       <button onClick={()=>addAggio(voce)} style={{background:"transparent",color:gruppo.accent,border:`1px dashed ${gruppo.accent}44`,borderRadius:7,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ accredito</button>
@@ -2011,12 +2032,12 @@ export default function App() {
               {/* LISTA DIPENDENTI */}
               {selDip===null&&<>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                  <div style={{fontSize:12,color:"#475569"}}>{MONTHS[month]} {year}</div>
-                  <button onClick={addDipendente} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Dipendente</button>
+                  <div style={{fontSize:12,color:"var(--cp-text4)"}}>{MONTHS[month]} {year}</div>
+                  <button onClick={addDipendente} style={{background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Dipendente</button>
                 </div>
 
                 {(personale.dipendenti||[]).length===0&&(
-                  <div style={{textAlign:"center",color:"#475569",padding:60,fontSize:13}}>Nessun dipendente.<br/>Clicca "+ Dipendente" per iniziare.</div>
+                  <div style={{textAlign:"center",color:"var(--cp-text4)",padding:60,fontSize:13}}>Nessun dipendente.<br/>Clicca "+ Dipendente" per iniziare.</div>
                 )}
 
                 {(personale.dipendenti||[]).map((dip,i)=>{
@@ -2024,16 +2045,16 @@ export default function App() {
                   const hasProm = promemoria.some(p=>p.testo===`Stipendio ${dip.nome}`);
                   return (
                     <div key={i} onClick={()=>setSelDip(i)}
-                      style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:14,marginBottom:10,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:"4px solid #60a5fa",padding:14,marginBottom:10,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div>
-                        <div style={{fontSize:14,fontWeight:800,color:"#e2e8f0",marginBottom:4}}>
+                        <div style={{fontSize:14,fontWeight:800,color:"var(--cp-text)",marginBottom:4}}>
                           {hasProm&&<span style={{color:"#f97316",marginRight:6}}>⚠️</span>}
                           {dip.nome||`Dipendente #${i+1}`}
                         </div>
-                        <div style={{fontSize:11,color:"#64748b"}}>
+                        <div style={{fontSize:11,color:"var(--cp-text3)"}}>
                           Stipendio: {dip.stipendio?`€${dip.stipendio}`:"—"} · Ore: {dip.ore_mensili||"—"}h/mese
                         </div>
-                        <div style={{fontSize:11,color:"#64748b",marginTop:2}}>
+                        <div style={{fontSize:11,color:"var(--cp-text3)",marginTop:2}}>
                           Ore lavorate: <b style={{color:"#4ade80"}}>{mens.ore.toFixed(1)}h</b> · Da pagare: <b style={{color:"#60a5fa"}}>{eur(mens.totale)}</b>
                         </div>
                         {dip.data_pagamento&&<div style={{fontSize:11,color:"#f97316",marginTop:2}}>Pagamento: {dip.data_pagamento}</div>}
@@ -2053,10 +2074,10 @@ export default function App() {
                 return (<>
                   {/* Header con freccia back */}
                   <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-                    <button onClick={()=>setSelDip(null)} style={{background:"#1e293b",color:"#e2e8f0",border:"none",borderRadius:8,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>← Torna</button>
+                    <button onClick={()=>setSelDip(null)} style={{background:"var(--cp-border)",color:"var(--cp-text)",border:"none",borderRadius:8,padding:"8px 14px",fontSize:14,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>← Torna</button>
                     <div>
-                      <div style={{fontSize:15,fontWeight:800,color:"#e2e8f0"}}>{dip.nome||`Dipendente #${selDip+1}`}</div>
-                      <div style={{fontSize:10,color:"#64748b"}}>Tariffa: {eur(tariffa)}/ora</div>
+                      <div style={{fontSize:15,fontWeight:800,color:"var(--cp-text)"}}>{dip.nome||`Dipendente #${selDip+1}`}</div>
+                      <div style={{fontSize:10,color:"var(--cp-text3)"}}>Tariffa: {eur(tariffa)}/ora</div>
                     </div>
                     <button onClick={()=>setConfirmDelDip(selDip)}
                       style={{marginLeft:"auto",background:"#1a0a0a",color:"#f87171",border:"none",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕ Rimuovi</button>
@@ -2068,7 +2089,7 @@ export default function App() {
                       <div style={{fontSize:13,color:"#f87171",fontWeight:700,marginBottom:8}}>
                         ⚠️ Rimuovere {dip.nome||`Dipendente #${selDip+1}`}?
                       </div>
-                      <div style={{fontSize:11,color:"#94a3b8",marginBottom:14}}>
+                      <div style={{fontSize:11,color:"var(--cp-text2)",marginBottom:14}}>
                         Verranno rimossi anche i dati contrattuali e il PIN. Le presenze salvate rimarranno nei dati storici.
                       </div>
                       <div style={{display:"flex",gap:8}}>
@@ -2081,7 +2102,7 @@ export default function App() {
                           ✕ Sì, rimuovi
                         </button>
                         <button onClick={()=>setConfirmDelDip(null)}
-                          style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:8,padding:11,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                          style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:8,padding:11,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
                           Annulla
                         </button>
                       </div>
@@ -2090,14 +2111,14 @@ export default function App() {
 
                   {/* PIN DIPENDENTE */}
                   <Block title="Accesso Dipendente" accent="#60a5fa">
-                    <div style={{fontSize:11,color:"#64748b",marginBottom:10}}>
+                    <div style={{fontSize:11,color:"var(--cp-text3)",marginBottom:10}}>
                       {hasDipIdxPIN(selDip)
                         ? `PIN attivo — ${dip.nome||"questo dipendente"} può accedere all'area presenze.`
                         : `Nessun PIN — ${dip.nome||"questo dipendente"} non può ancora accedere.`}
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       <button onClick={()=>{ setPinModeTarget(selDip); setPinMode("setup_dip_idx"); }}
-                        style={{flex:1,background:"#0a1020",color:"#60a5fa",border:"1px solid #1e3a5f",
+                        style={{flex:1,background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",
                           borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                         {hasDipIdxPIN(selDip) ? "🔄 Cambia PIN" : "🔒 Imposta PIN"}
                       </button>
@@ -2116,7 +2137,7 @@ export default function App() {
                           <button onClick={()=>{ removeDipIdxPIN(selDip); setConfirmRemPinDip(null); }}
                             style={{flex:1,background:"#7f1d1d",color:"#fca5a5",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Sì, rimuovi</button>
                           <button onClick={()=>setConfirmRemPinDip(null)}
-                            style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Annulla</button>
+                            style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Annulla</button>
                         </div>
                       </div>
                     )}
@@ -2135,7 +2156,7 @@ export default function App() {
                     <Row>
                       <Fld label="Data pagamento (gg/mm/aaaa)" val={dip.data_pagamento||""} set={v=>updDipendente(selDip,"data_pagamento",v)} type="text" flex="2 1 180px"/>
                       <div style={{flex:"1 1 120px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
-                        <span style={{fontSize:11,color:"#475569"}}>Banner 7 giorni prima</span>
+                        <span style={{fontSize:11,color:"var(--cp-text4)"}}>Banner 7 giorni prima</span>
                       </div>
                     </Row>
                   </Block>
@@ -2158,11 +2179,11 @@ export default function App() {
                       const ore = calcOre(p.entrata, p.uscita);
                       const wd = new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
                       return (
-                        <div key={d} style={{background:"#080e1c",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"#1e293b"}`}}>
+                        <div key={d} style={{background:"var(--cp-bg4)",borderRadius:8,padding:10,marginBottom:8,borderLeft:`3px solid ${TIPO_COLOR[p.tipo]||"var(--cp-border)"}`}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <span style={{fontSize:12,fontWeight:800,color:"#e2e8f0"}}>{wd} {d}</span>
+                            <span style={{fontSize:12,fontWeight:800,color:"var(--cp-text)"}}>{wd} {d}</span>
                             <select value={p.tipo} onChange={e=>updPresenza(selDip,d,"tipo",e.target.value)}
-                              style={{background:"#0f1923",color:TIPO_COLOR[p.tipo],border:"1px solid #1e293b",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
+                              style={{background:"var(--cp-bg3)",color:TIPO_COLOR[p.tipo],border:"1px solid #1e293b",padding:"5px 8px",borderRadius:6,fontSize:11,fontFamily:"inherit",fontWeight:700}}>
                               {["lavoro","malattia","permesso","assenza","ferie"].map(t=><option key={t} value={t}>{TIPO_IT[t]}</option>)}
                             </select>
                           </div>
@@ -2191,12 +2212,12 @@ export default function App() {
 
             {tab==="pagamenti"&&<>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <div style={{fontSize:12,color:"#94a3b8"}}>Scadenze e pagamenti pianificati</div>
-                <button onClick={addPagamento} style={{background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi</button>
+                <div style={{fontSize:12,color:"var(--cp-text2)"}}>Scadenze e pagamenti pianificati</div>
+                <button onClick={addPagamento} style={{background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi</button>
               </div>
 
               {pagamenti.length===0&&(
-                <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>Nessun pagamento. Clicca "+ Aggiungi" per iniziare.</div>
+                <div style={{textAlign:"center",color:"var(--cp-text4)",padding:40,fontSize:13}}>Nessun pagamento. Clicca "+ Aggiungi" per iniziare.</div>
               )}
 
               {pagamenti.map((pag,i)=>{
@@ -2205,7 +2226,7 @@ export default function App() {
                 const inScadenza = diff !== null && diff >= 0 && diff <= 7 && !pag.pagato;
                 const borderColor = pag.pagato ? "#166534" : scaduto ? "#f87171" : inScadenza ? "#f97316" : "#334155";
                 return (
-                  <div key={i} style={{background:"#0f1923",borderRadius:12,borderLeft:`4px solid ${borderColor}`,padding:14,marginBottom:10}}>
+                  <div key={i} style={{background:"var(--cp-bg3)",borderRadius:12,borderLeft:`4px solid ${borderColor}`,padding:14,marginBottom:10}}>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
                       <span style={{fontSize:10,fontWeight:800,letterSpacing:1,color:borderColor}}>
                         {pag.pagato ? "✅ PAGATO" : scaduto ? "🔴 SCADUTO" : inScadenza ? "🟠 IN SCADENZA" : "⏳ PIANIFICATO"}
@@ -2220,14 +2241,14 @@ export default function App() {
                       <Fld label="Data scadenza (gg/mm/aaaa)" val={pag.data_scadenza} set={v=>updPagamento(i,"data_scadenza",v)} type="text" flex="2 1 160px"/>
                       {diff !== null && !pag.pagato && (
                         <div style={{flex:"1 1 100px",display:"flex",alignItems:"flex-end",paddingBottom:10}}>
-                          <span style={{fontSize:12,fontWeight:700,color:scaduto?"#f87171":inScadenza?"#f97316":"#64748b"}}>
+                          <span style={{fontSize:12,fontWeight:700,color:scaduto?"#f87171":inScadenza?"#f97316":"var(--cp-text3)"}}>
                             {scaduto ? `Scaduto ${Math.abs(diff)}gg fa` : diff===0 ? "Oggi!" : `Tra ${diff} giorni`}
                           </span>
                         </div>
                       )}
                     </Row>
                     <div style={{display:"flex",alignItems:"center",gap:12,marginTop:4}}>
-                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#94a3b8"}}>
+                      <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"var(--cp-text2)"}}>
                         <input type="checkbox" checked={pag.pagato||false} onChange={e=>updPagamento(i,"pagato",e.target.checked)}
                           style={{width:16,height:16,cursor:"pointer"}}/>
                         Segna come pagato
@@ -2279,7 +2300,7 @@ export default function App() {
               const maxMov  = Math.max(...annualData.map(r=>Math.abs(r.movM)), 1);
 
               return (<>
-                <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>ANNO {year}</div>
+                <div style={{fontSize:11,color:"var(--cp-text4)",marginBottom:14,letterSpacing:1}}>ANNO {year}</div>
 
                 {/* KPI annuali */}
                 <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:20}}>
@@ -2298,7 +2319,7 @@ export default function App() {
                     if(!r.hasAny) return (
                       <div key={r.m} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                         <div style={{width:32,fontSize:10,color:"#334155",fontWeight:700,flexShrink:0}}>{r.mName.slice(0,3)}</div>
-                        <div style={{fontSize:10,color:"#1e293b"}}>—</div>
+                        <div style={{fontSize:10,color:"var(--cp-border)"}}>—</div>
                       </div>
                     );
                     const pct = Math.abs(r.guadConAggi)/maxGuad*100;
@@ -2306,10 +2327,10 @@ export default function App() {
                     return (
                       <div key={r.m} style={{marginBottom:8}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
+                          <span style={{fontSize:10,color:"var(--cp-text2)",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
                           <span style={{fontSize:11,fontWeight:800,color:pos?"#a78bfa":"#f87171"}}>{eur(r.guadConAggi)}</span>
                         </div>
-                        <div style={{background:"#080e1c",borderRadius:4,height:10,overflow:"hidden"}}>
+                        <div style={{background:"var(--cp-bg4)",borderRadius:4,height:10,overflow:"hidden"}}>
                           <div style={{height:"100%",width:`${pct}%`,background:pos?"linear-gradient(90deg,#7c3aed,#a78bfa)":"#f87171",borderRadius:4,transition:"width 0.3s"}}/>
                         </div>
                       </div>
@@ -2323,17 +2344,17 @@ export default function App() {
                     if(!r.hasAny) return (
                       <div key={r.m} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                         <div style={{width:32,fontSize:10,color:"#334155",fontWeight:700,flexShrink:0}}>{r.mName.slice(0,3)}</div>
-                        <div style={{fontSize:10,color:"#1e293b"}}>—</div>
+                        <div style={{fontSize:10,color:"var(--cp-border)"}}>—</div>
                       </div>
                     );
                     const pct = Math.abs(r.movM)/maxMov*100;
                     return (
                       <div key={r.m} style={{marginBottom:8}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                          <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
+                          <span style={{fontSize:10,color:"var(--cp-text2)",fontWeight:700}}>{r.mName.slice(0,3).toUpperCase()}</span>
                           <span style={{fontSize:11,fontWeight:800,color:"#4ade80"}}>{eur(r.movM)}</span>
                         </div>
-                        <div style={{background:"#080e1c",borderRadius:4,height:10,overflow:"hidden"}}>
+                        <div style={{background:"var(--cp-bg4)",borderRadius:4,height:10,overflow:"hidden"}}>
                           <div style={{height:"100%",width:`${pct}%`,background:"linear-gradient(90deg,#166534,#4ade80)",borderRadius:4,transition:"width 0.3s"}}/>
                         </div>
                       </div>
@@ -2345,7 +2366,7 @@ export default function App() {
                 <Block title="Dettaglio Mese per Mese" accent="#60a5fa">
                   {/* header */}
                   <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,marginBottom:8,
-                    fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1}}>
+                    fontSize:9,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1}}>
                     <span>MESE</span><span style={{textAlign:"right"}}>MOVIMENTO</span>
                     <span style={{textAlign:"right"}}>GUAD.+AGGI</span><span style={{textAlign:"right"}}>VERSATO</span>
                   </div>
@@ -2355,7 +2376,7 @@ export default function App() {
                       style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,
                         padding:"8px 0",borderBottom:"1px solid #080e1c",cursor:"pointer",
                         opacity:r.hasAny?1:0.3}}>
-                      <span style={{fontSize:11,fontWeight:800,color: month===r.m?"#60a5fa":"#94a3b8"}}>{r.mName.slice(0,3)}</span>
+                      <span style={{fontSize:11,fontWeight:800,color: month===r.m?"#60a5fa":"var(--cp-text2)"}}>{r.mName.slice(0,3)}</span>
                       <span style={{fontSize:11,color:"#4ade80",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.hasAny?eur(r.movM):"—"}</span>
                       <span style={{fontSize:11,fontWeight:700,color:r.guadConAggi>=0?"#a78bfa":"#f87171",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.hasAny?eur(r.guadConAggi):"—"}</span>
                       <span style={{fontSize:11,color:"#f87171",textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{r.totVers>0?eur(r.totVers):"—"}</span>
@@ -2364,7 +2385,7 @@ export default function App() {
                   {/* riga totale */}
                   <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,
                     padding:"10px 0",fontSize:12,fontWeight:800,marginTop:4}}>
-                    <span style={{color:"#e2e8f0"}}>TOTALE</span>
+                    <span style={{color:"var(--cp-text)"}}>TOTALE</span>
                     <span style={{color:"#4ade80",textAlign:"right"}}>{eur(totAnno.movM)}</span>
                     <span style={{color:totAnno.guadConAggi>=0?"#a78bfa":"#f87171",textAlign:"right"}}>{eur(totAnno.guadConAggi)}</span>
                     <span style={{color:"#f87171",textAlign:"right"}}>{eur(totAnno.totVers)}</span>
@@ -2394,11 +2415,11 @@ export default function App() {
                   return (
                     <Block title={`${MONTHS[month]} ${year} vs ${MONTHS[month]} ${prevYear2}`} accent="#fbbf24">
                       <RRow label={`Movimento ${year}`} val={eur(curMonth.movM)} color="#4ade80"/>
-                      <RRow label={`Movimento ${prevYear2}`} val={eur(movPrev)} color="#64748b"/>
+                      <RRow label={`Movimento ${prevYear2}`} val={eur(movPrev)} color="var(--cp-text3)"/>
                       <RRow label="Differenza movimento" val={eur(diffMov,true)} color={diffMov>=0?"#4ade80":"#f87171"} bold/>
                       <div style={{height:8}}/>
                       <RRow label={`Guad.+Aggi ${year}`} val={eur(curMonth.guadConAggi)} color="#a78bfa"/>
-                      <RRow label={`Guad.+Aggi ${prevYear2}`} val={eur(guadPrev+totAggiPrev)} color="#64748b"/>
+                      <RRow label={`Guad.+Aggi ${prevYear2}`} val={eur(guadPrev+totAggiPrev)} color="var(--cp-text3)"/>
                       <RRow label="Differenza guadagno" val={eur(diffGuad,true)} color={diffGuad>=0?"#4ade80":"#f87171"} bold/>
                     </Block>
                   );
@@ -2409,7 +2430,7 @@ export default function App() {
 
             {/* ── RIEPILOGO ── */}
             {tab==="riepilogo"&&<>
-              <div style={{fontSize:11,color:"#475569",marginBottom:14,letterSpacing:1}}>GIORNO {day} — {MONTHS[month].toUpperCase()} {year}</div>
+              <div style={{fontSize:11,color:"var(--cp-text4)",marginBottom:14,letterSpacing:1}}>GIORNO {day} — {MONTHS[month].toUpperCase()} {year}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:16}}>
                 <Stat label="Movimento oggi" val={eur(calc.movimento)} accent="#4ade80" big/>
                 <Stat label="Guadagno oggi" val={eur(calc.guadagno)} accent={calc.guadagno>=0?"#60a5fa":"#f87171"} big/>
@@ -2438,7 +2459,7 @@ export default function App() {
                   ["Monete (oggi−domani)", calc.monete_diff, calc.monete_diff>=0?"#4ade80":"#f87171"],
                   ["Debiti (oggi−domani)", calc.debiti_diff, calc.debiti_diff>=0?"#4ade80":"#f87171"],
                   ["− Spese contanti", -calc.spese_cont, "#f87171"],
-                  ["± Arrotondamento", n(today.arrotondamento), "#94a3b8"],
+                  ["± Arrotondamento", n(today.arrotondamento), "var(--cp-text2)"],
                 ].filter(([,v])=>v!==0).map(([l,v,c])=><RRow key={l} label={l} val={eur(v,true)} color={c}/>)}
                 <RRow label="TOTALE MOVIMENTO" val={eur(calc.movimento)} color="#4ade80" bold/>
               </Block>
@@ -2470,21 +2491,21 @@ export default function App() {
               </Block>
 
               <Block title="Cassa Accumulata" accent="#a78bfa">
-                <RRow label="Residuo mese precedente" val={eur(residuoPrecedente)} color="#64748b"/>
+                <RRow label="Residuo mese precedente" val={eur(residuoPrecedente)} color="var(--cp-text3)"/>
                 <RRow label="Movimenti mese corrente" val={eur(movMensile)} color="#4ade80"/>
                 <RRow label="− Totale versato" val={eur(-totVersati)} color="#f87171"/>
                 <RRow label="CASSA ATTUALE" val={eur(cassaAccumulata)} color={cassaAccumulata>=0?"#a78bfa":"#f87171"} bold/>
               </Block>
 
-              <button onClick={()=>window.print()} style={{width:"100%",background:"#0f1923",color:"#64748b",border:"1px solid #1e293b",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>🖨️ Stampa / Salva PDF</button>
+              <button onClick={()=>window.print()} style={{width:"100%",background:"var(--cp-bg3)",color:"var(--cp-text3)",border:"1px solid #1e293b",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>🖨️ Stampa / Salva PDF</button>
 
               {/* PIN MANAGEMENT */}
-              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e293b"}}>
+              <div style={{background:"var(--cp-bg3)",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e293b"}}>
                 <div style={{fontSize:10,color:"#fbbf24",fontWeight:800,letterSpacing:1,marginBottom:10}}>🔐 SICUREZZA PIN</div>
 
                 {/* PIN ADMIN */}
                 <div style={{marginBottom:8}}>
-                  <div style={{fontSize:11,color:"#94a3b8",marginBottom:6}}>
+                  <div style={{fontSize:11,color:"var(--cp-text2)",marginBottom:6}}>
                     👔 PIN Admin (6 cifre) — {hasAdminPIN() ? "✅ attivo" : "❌ non impostato"}
                   </div>
                   <div style={{display:"flex",gap:8}}>
@@ -2494,7 +2515,7 @@ export default function App() {
                       </button>
                     ) : (
                       <>
-                        <button onClick={()=>setPinMode("change_admin")} style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        <button onClick={()=>setPinMode("change_admin")} style={{flex:1,background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                           🔄 Cambia
                         </button>
                         <button onClick={()=>setConfirmRemAdminPIN(true)}
@@ -2511,7 +2532,7 @@ export default function App() {
                         <button onClick={()=>{ removeAdminPIN(); setCurrentRole("admin"); setConfirmRemAdminPIN(false); }}
                           style={{flex:1,background:"#7f1d1d",color:"#fca5a5",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Sì, rimuovi</button>
                         <button onClick={()=>setConfirmRemAdminPIN(false)}
-                          style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Annulla</button>
+                          style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Annulla</button>
                       </div>
                     </div>
                   )}
@@ -2529,10 +2550,10 @@ export default function App() {
                       {role:"dipendente", label:"👤 Dipendente", opts:[5,10,15,30]},
                     ].map(({role,label,opts})=>(
                       <div key={role} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <span style={{fontSize:12,color:"#94a3b8"}}>{label}</span>
+                        <span style={{fontSize:12,color:"var(--cp-text2)"}}>{label}</span>
                         <select value={inactivityCfg[role]||30}
                           onChange={e=>saveInactivityCfg({...inactivityCfg,[role]:+e.target.value})}
-                          style={{background:"#080e1c",color:"#a78bfa",border:"1px solid #4c1d95",
+                          style={{background:"var(--cp-bg4)",color:"#a78bfa",border:"1px solid #4c1d95",
                             borderRadius:7,padding:"6px 10px",fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>
                           {opts.map(m=><option key={m} value={m}>{m} min</option>)}
                         </select>
@@ -2552,52 +2573,52 @@ export default function App() {
                 a.download = `cassa-pro-backup-${year}.json`;
                 a.click();
                 localStorage.setItem("cassapro_last_backup", new Date().toISOString());
-              }} style={{width:"100%",background:"#0f1923",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+              }} style={{width:"100%",background:"var(--cp-bg3)",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
                 💾 Backup completo (JSON)
               </button>
 
               <button onClick={()=> exportExcel({
                 all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
                 AGGI_BAR_VOCI, AGGI_TAB_VOCI, aggiLabel, mk, vk, pk, pgk
-              })} style={{width:"100%",background:"#0f1923",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
+              })} style={{width:"100%",background:"var(--cp-bg3)",color:"#4ade80",border:"1px solid #166534",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>
                 📊 Esporta Excel (.xlsx) — {MONTHS[month]} {year}
               </button>
 
               {/* GOOGLE DRIVE SYNC */}
-              <div style={{background:"#0f1923",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e3a5f"}}>
+              <div style={{background:"var(--cp-bg3)",borderRadius:10,padding:12,marginTop:8,border:"1px solid #1e3a5f"}}>
                 <div style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:10}}>☁️ SYNC GOOGLE DRIVE</div>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={handleDriveSave} disabled={driveStatus==="syncing"}
-                    style={{flex:1,background:"#0a1a2a",color:"#4ade80",border:"1px solid #166534",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    style={{flex:1,background:"var(--cp-bg2)",color:"#4ade80",border:"1px solid #166534",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                     {driveStatus==="syncing"?"⏳ Salvataggio...":driveStatus==="ok"?"✅ Salvato!":driveStatus==="error"?"❌ Errore":"☁️ Salva su Drive"}
                   </button>
                   <button onClick={handleDriveLoad} disabled={driveStatus==="syncing"||driveStatus==="confirm_load"}
-                    style={{flex:1,background:"#0a1a2a",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    style={{flex:1,background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",borderRadius:8,padding:11,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                     {driveStatus==="syncing"?"⏳ Caricamento...":driveStatus==="nobackup"?"❌ Nessun backup":"📥 Carica da Drive"}
                   </button>
                 </div>
                 {/* Conferma caricamento Drive — inline, funziona su mobile */}
                 {driveStatus==="confirm_load"&&(
-                  <div style={{background:"#0a1a2a",border:"1px solid #f97316",borderRadius:10,padding:12,marginTop:10}}>
+                  <div style={{background:"var(--cp-bg2)",border:"1px solid #f97316",borderRadius:10,padding:12,marginTop:10}}>
                     <div style={{fontSize:12,color:"#f97316",marginBottom:10,fontWeight:700}}>
                       ⚠️ I dati locali verranno sostituiti con quelli del Drive. Continuare?
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       <button onClick={handleDriveLoadConfirmed}
-                        style={{flex:1,background:"#1e3a5f",color:"#60a5fa",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                        style={{flex:1,background:"var(--cp-border2)",color:"#60a5fa",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                         Sì, carica
                       </button>
                       <button onClick={()=>setDriveStatus("")}
-                        style={{flex:1,background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+                        style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
                         Annulla
                       </button>
                     </div>
                   </div>
                 )}
-                <div style={{fontSize:10,color:"#475569",marginTop:8}}>La prima volta ti chiederà di autorizzare con Google</div>
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginTop:8}}>La prima volta ti chiederà di autorizzare con Google</div>
               </div>
 
-              <label style={{display:"block",width:"100%",background:"#0f1923",color:"#a78bfa",border:"1px solid #3b0764",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8,textAlign:"center",boxSizing:"border-box"}}>
+              <label style={{display:"block",width:"100%",background:"var(--cp-bg3)",color:"#a78bfa",border:"1px solid #3b0764",borderRadius:10,padding:13,fontSize:13,cursor:"pointer",fontFamily:"inherit",marginTop:8,textAlign:"center",boxSizing:"border-box"}}>
                 {restoreStatus==="ok"?"✅ Ripristinato!":restoreStatus==="error"?"❌ File non valido":"📂 Ripristina da backup (JSON)"}
                 <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{
                   const file = e.target.files[0];
@@ -2629,8 +2650,8 @@ export default function App() {
         {/* Bottone floating */}
         <button onClick={()=>setNotaOpen(true)}
           style={{position:"fixed",bottom:24,right:20,width:52,height:52,borderRadius:"50%",
-            background: today.nota_rapida ? "#1a1400" : "#0f1923",
-            color: today.nota_rapida ? "#fbbf24" : "#475569",
+            background: today.nota_rapida ? "#1a1400" : "var(--cp-bg3)",
+            color: today.nota_rapida ? "#fbbf24" : "var(--cp-text4)",
             border:`2px solid ${today.nota_rapida?"#fbbf24":"#334155"}`,
             fontSize:22,cursor:"pointer",zIndex:30,boxShadow:"0 4px 20px #00000088",
             display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
@@ -2641,17 +2662,17 @@ export default function App() {
         {notaOpen&&(
           <div style={{position:"fixed",inset:0,background:"#00000099",zIndex:50,
             display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
-            <div style={{background:"#0d1526",borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",
+            <div style={{background:"var(--cp-bg2)",borderRadius:"20px 20px 0 0",padding:"20px 20px 32px",
               width:"100%",maxWidth:700,border:"1px solid #1e293b",borderBottom:"none"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <div>
                   <div style={{fontSize:13,fontWeight:800,color:"#fbbf24",letterSpacing:1}}>📝 NOTA RAPIDA</div>
-                  <div style={{fontSize:10,color:"#475569",marginTop:2}}>
+                  <div style={{fontSize:10,color:"var(--cp-text4)",marginTop:2}}>
                     {String(day).padStart(2,"0")}/{String(month+1).padStart(2,"0")}/{year}
                   </div>
                 </div>
                 <button onClick={()=>setNotaOpen(false)}
-                  style={{background:"#1e293b",color:"#94a3b8",border:"none",borderRadius:8,
+                  style={{background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:8,
                     padding:"6px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
               </div>
               <textarea
@@ -2659,13 +2680,13 @@ export default function App() {
                 value={today.nota_rapida||""}
                 onChange={e=>upd("nota_rapida",e.target.value)}
                 placeholder="Scrivi qui una nota per oggi... (es. chiusura anticipata, problema slot 2, fornitore chiamato...)"
-                style={{width:"100%",background:"#080e1c",color:"#e2e8f0",
-                  border:`1px solid ${today.nota_rapida?"#fbbf24":"#1e293b"}`,
+                style={{width:"100%",background:"var(--cp-bg4)",color:"var(--cp-text)",
+                  border:`1px solid ${today.nota_rapida?"#fbbf24":"var(--cp-border)"}`,
                   borderRadius:10,padding:14,fontSize:14,minHeight:130,
                   boxSizing:"border-box",resize:"none",fontFamily:"inherit",lineHeight:1.6,outline:"none"}}/>
               {today.nota_rapida&&(
                 <button onClick={()=>{upd("nota_rapida","");}}
-                  style={{marginTop:8,background:"transparent",color:"#475569",border:"none",
+                  style={{marginTop:8,background:"transparent",color:"var(--cp-text4)",border:"none",
                     fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>
                   🗑 Cancella nota
                 </button>
