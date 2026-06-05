@@ -589,12 +589,13 @@ const emptyDay = () => ({
   lis:"", sisal:"", valori:"",
   dist_prelievo:"", dist_nota:"",
   slot_raccolto:"", slot_refill:"", slot_monete:"", slot_note:"",
-  pf_oggi:"", pf_domani:"",
+  pf_ieri:"", pf_domani:"",   // PF ieri = auto da ieri; PF domani = quanto lasci stasera
   monete_oggi:"", monete_domani:"",
   debiti_oggi:"", debiti_domani:"",
   arrotondamento:"",
   spese:[],
 });
+const dbk = () => "debiti_clienti"; // chiave globale debiti clienti
 
 const emptySpesa = () => ({ dove:"", tipo:"merce", contante:"", elettronico:"", nota:"" });
 const emptyVersamento = () => ({ importo:"", data:"", nota:"" });
@@ -784,17 +785,21 @@ const TIPO_IT    = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", 
 const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
 
 function calcDay(t) {
-  if (!t) return { tab_rim:0,gratta_rim:0,lotto_rim:0,spese_cont:0,spese_ele:0,pf_diff:0,monete_diff:0,debiti_diff:0,movimento:0,guadagno:0 };
-  const tab_rim = n(t.tab_venduto) - n(t.tab_pos);
+  if (!t) return { tab_rim:0,gratta_rim:0,lotto_rim:0,spese_cont:0,spese_ele:0,spese_tot:0,pf_diff:0,monete_diff:0,debiti_diff:0,movimento:0,guadagno:0,pos_bar:0 };
+  const tab_rim    = n(t.tab_venduto) - n(t.tab_pos);
   const gratta_rim = n(t.gratta_venduto) - n(t.gratta_pagati);
-  const lotto_rim = n(t.lotto_venduto) - n(t.lotto_pagati);
+  const lotto_rim  = n(t.lotto_venduto) - n(t.lotto_pagati);
   const spese_cont = (t.spese||[]).reduce((s,x)=>s+n(x.contante),0);
-  const spese_ele = (t.spese||[]).reduce((s,x)=>s+n(x.elettronico),0);
-  const pf_diff = n(t.pf_oggi) - n(t.pf_domani);
-  const monete_diff = n(t.monete_oggi) - n(t.monete_domani);
-  const debiti_diff = n(t.debiti_oggi) - n(t.debiti_domani);
+  const spese_ele  = (t.spese||[]).reduce((s,x)=>s+n(x.elettronico),0);
+  const spese_tot  = spese_cont + spese_ele;
+  const pf_diff    = n(t.pf_ieri) - n(t.pf_domani);   // PF ieri aggiunge, PF domani toglie
+  const monete_diff  = n(t.monete_oggi) - n(t.monete_domani);
+  const debiti_diff  = n(t.debiti_oggi) - n(t.debiti_domani);
+  const pos_bar    = n(t.pos_bar);
+  // Movimento: contanti fisici reali
+  // Bar+risto già comprensivi di POS → sottraiamo pos_bar (non è contante)
   const movimento =
-    n(t.bar) + n(t.risto)
+    n(t.bar) + n(t.risto) - pos_bar
     + tab_rim + gratta_rim + lotto_rim
     + n(t.art_tabacchi) + n(t.toto) + n(t.virtual) + n(t.lis) + n(t.sisal) + n(t.valori)
     + n(t.dist_prelievo)
@@ -802,8 +807,9 @@ function calcDay(t) {
     + pf_diff + monete_diff + debiti_diff
     - spese_cont
     + n(t.arrotondamento);
-  const guadagno = n(t.bar) + n(t.risto) + n(t.pos_bar) + n(t.art_tabacchi) - spese_cont - spese_ele;
-  return { tab_rim, gratta_rim, lotto_rim, spese_cont, spese_ele, pf_diff, monete_diff, debiti_diff, movimento, guadagno };
+  // Guadagno: economico (bar+risto già comprende POS, non aggiungiamo pos_bar)
+  const guadagno = n(t.bar) + n(t.risto) + n(t.art_tabacchi) - spese_cont - spese_ele;
+  return { tab_rim, gratta_rim, lotto_rim, spese_cont, spese_ele, spese_tot, pf_diff, monete_diff, debiti_diff, movimento, guadagno, pos_bar };
 }
 
 // UI atoms
@@ -857,6 +863,7 @@ const TABS = [
   {id:"slot",label:"🕹️ Slot"},
   {id:"cassa",label:"🏦 Cassa"},
   {id:"spese",label:"📋 Spese"},
+  {id:"debiti",label:"🔴 Debiti"},
   {id:"versamenti",label:"🏛️ Versamenti"},
   {id:"aggi",label:"📑 Aggi"},
   {id:"personale",label:"👥 Personale"},
@@ -1140,6 +1147,16 @@ export default function App() {
     }
   }, []);
   const [year, setYear] = useState(now.getFullYear());
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("cassapro_theme") !== "light");
+  const T = darkMode ? {
+    bg:"#05090f", bg2:"#0d1526", bg3:"#0f1923", bg4:"#080e1c",
+    border:"#1e293b", border2:"#1e3a5f", text:"#e2e8f0", text2:"#94a3b8",
+    text3:"#64748b", text4:"#475569", header:"#0a1520"
+  } : {
+    bg:"#f1f5f9", bg2:"#ffffff", bg3:"#f8fafc", bg4:"#e2e8f0",
+    border:"#cbd5e1", border2:"#93c5fd", text:"#0f172a", text2:"#334155",
+    text3:"#475569", text4:"#64748b", header:"#ffffff"
+  };
   const [month, setMonth] = useState(now.getMonth());
   const [day, setDay] = useState(now.getDate());
   const [tab, setTab] = useState("incassi");
@@ -1208,11 +1225,18 @@ export default function App() {
   const upd = (f, v) => {
     const updatedDay = {...today, [f]: v};
     let updated = {...all, [KEY]: updatedDay};
-    // Auto-fill next day's pf/monete/debiti "oggi" fields
-    if (f === "pf_domani" || f === "monete_domani" || f === "debiti_domani") {
-      const fieldMap = { pf_domani:"pf_oggi", monete_domani:"monete_oggi", debiti_domani:"debiti_oggi" };
+    // Auto-fill: pf_domani → diventa pf_ieri del giorno dopo
+    if (f === "pf_domani") {
       const nextDay = all[NKEY] || emptyDay();
-      updated = {...updated, [NKEY]: {...nextDay, [fieldMap[f]]: v}};
+      updated = {...updated, [NKEY]: {...nextDay, pf_ieri: v}};
+    }
+    if (f === "monete_domani") {
+      const nextDay = all[NKEY] || emptyDay();
+      updated = {...updated, [NKEY]: {...nextDay, monete_oggi: v}};
+    }
+    if (f === "debiti_domani") {
+      const nextDay = all[NKEY] || emptyDay();
+      updated = {...updated, [NKEY]: {...nextDay, debiti_oggi: v}};
     }
     save(updated);
   };
@@ -1366,11 +1390,12 @@ export default function App() {
   const movMensile = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.movimento:0),0);
   const cassaAccumulata = residuoPrecedente + movMensile - totVersati;
 
-  // Somma progressiva fino al giorno corrente
   const movFinoOggi = monthRows.filter(x=>x.day<=day).reduce((s,x)=>s+(hasRealData(x.data)?x.calc.movimento:0),0);
   const cassaOggi = residuoPrecedente + movFinoOggi - totVersati;
 
-  const mGuadagno = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
+  const mGuadagno    = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
+  const mPosMensile  = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.pos_bar:0),0);
+  const mSpeseMensili= monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.spese_tot:0),0);
 
   // ── PIN: early returns ──
   // dipCount: cerca i dipendenti in tutti i mesi disponibili (non solo quello corrente)
@@ -1469,7 +1494,7 @@ export default function App() {
   }
 
   return (
-    <div style={{minHeight:"100vh",background:"#05090f",color:"#e2e8f0",fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
+    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'DM Mono','Courier New',monospace",maxWidth:700,margin:"0 auto",paddingBottom:60}}>
 
       {/* HEADER */}
       <div style={{background:"linear-gradient(180deg,#0d1526 0%,#05090f 100%)",padding:"18px 16px 10px",position:"sticky",top:0,zIndex:20,borderBottom:"1px solid #1e293b"}}>
@@ -1481,6 +1506,12 @@ export default function App() {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"#14532d",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            {/* Pulsante tema */}
+            <button onClick={()=>{ const nd=!darkMode; setDarkMode(nd); localStorage.setItem("cassapro_theme",nd?"dark":"light"); }}
+              title="Cambia tema"
+              style={{background:T.bg2,color:T.text3,border:`1px solid ${T.border}`,padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              {darkMode?"☀️":"🌙"}
+            </button>
             {/* Pulsante lock */}
             <button
               onClick={() => {
@@ -1542,6 +1573,8 @@ export default function App() {
             <Stat label="Cassa attuale" val={eur(cassaAccumulata)} accent={cassaAccumulata>=0?"#60a5fa":"#f87171"} big/>
             <Stat label="Guadagno mese" val={eur(mGuadagno)} accent="#a78bfa"/>
             <Stat label="Guadagno + Aggi" val={eur(mGuadagno+totAggi)} accent={mGuadagno+totAggi>=0?"#4ade80":"#f87171"} big/>
+            <Stat label="POS Bar mese" val={eur(mPosMensile)} accent="#a78bfa"/>
+            <Stat label="Spese mese" val={eur(mSpeseMensili)} accent="#f87171"/>
           </div>
           <div style={{background:"#0f1923",borderRadius:12,overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 1fr",padding:"10px 14px",background:"#080e1c",fontSize:9,color:"#475569",fontWeight:800,letterSpacing:1,gap:6}}>
@@ -1766,26 +1799,45 @@ export default function App() {
               <div style={{background:"#0f1923",borderRadius:10,padding:12,marginBottom:14,borderLeft:"4px solid #475569"}}>
                 <div style={{fontSize:10,color:"#475569",fontWeight:800,letterSpacing:1,marginBottom:6}}>LOGICA PF / MONETE / DEBITI</div>
                 <div style={{fontSize:11,color:"#64748b",lineHeight:1.7}}>
-                  <b style={{color:"#e2e8f0"}}>Oggi</b> = valore lasciato ieri (precompilato automaticamente) → si <b style={{color:"#4ade80"}}>somma</b><br/>
-                  <b style={{color:"#e2e8f0"}}>Domani</b> = quanto lasci stasera → si <b style={{color:"#f87171"}}>sottrae</b> e viene copiato automaticamente come "Oggi" di domani
+                  <b style={{color:"#e2e8f0"}}>Ieri</b> = precompilato automaticamente da ieri sera → si <b style={{color:"#4ade80"}}>somma</b><br/>
+                  <b style={{color:"#e2e8f0"}}>Domani</b> = quanto lasci stasera → si <b style={{color:"#f87171"}}>sottrae</b> e va automaticamente come "Ieri" di domani
                 </div>
               </div>
               {[
-                {title:"Fondo Cassa (PF)",accent:"#60a5fa",fOggi:"pf_oggi",fDom:"pf_domani",diff:calc.pf_diff},
-                {title:"Monete Extra",accent:"#fbbf24",fOggi:"monete_oggi",fDom:"monete_domani",diff:calc.monete_diff},
-                {title:"Debiti Clienti",accent:"#f87171",fOggi:"debiti_oggi",fDom:"debiti_domani",diff:calc.debiti_diff},
+                {title:"Portafoglio (PF)",accent:"#60a5fa",fIeri:"pf_ieri",fDom:"pf_domani",diff:calc.pf_diff},
+                {title:"Monete Extra",accent:"#fbbf24",fIeri:"monete_oggi",fDom:"monete_domani",diff:calc.monete_diff},
               ].map(c=>(
                 <Block key={c.title} title={c.title} accent={c.accent}>
                   <Row>
-                    <Fld label="Oggi (modificabile)" val={today[c.fOggi]} set={v=>upd(c.fOggi,v)}/>
+                    <Fld label="Ieri (precompilato)" val={today[c.fIeri]} set={v=>upd(c.fIeri,v)}/>
                     <Fld label="Domani (lascio stasera)" val={today[c.fDom]} set={v=>upd(c.fDom,v)}/>
                     <Calc label="Impatto movimento" val={c.diff} color={c.diff>=0?"#4ade80":"#f87171"}/>
                   </Row>
                   <div style={{fontSize:10,color:"#475569",marginBottom:6}}>
-                    ↑ "Oggi" è precompilato da ieri ma puoi modificarlo manualmente se necessario
+                    ↑ "Ieri" è precompilato automaticamente ma puoi modificarlo se necessario
                   </div>
                 </Block>
               ))}
+              {/* Debiti clienti — precompilato dal tab Debiti */}
+              <Block title="Debiti Clienti" accent="#f87171">
+                {(()=>{
+                  const debiti = all[dbk()] || [];
+                  const totAperti = debiti.filter(d=>!d.pagato).reduce((s,d)=>s+n(d.importo),0);
+                  return (<>
+                    <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>
+                      Totale debiti aperti dal tab Debiti: <b style={{color:"#f87171"}}>{eur(totAperti)}</b>
+                    </div>
+                    <Row>
+                      <Fld label="Ieri (precompilato)" val={today.debiti_oggi||String(totAperti||"")} set={v=>upd("debiti_oggi",v)}/>
+                      <Fld label="Domani (aggiorna)" val={today.debiti_domani} set={v=>upd("debiti_domani",v)}/>
+                      <Calc label="Impatto movimento" val={calc.debiti_diff} color={calc.debiti_diff>=0?"#4ade80":"#f87171"}/>
+                    </Row>
+                    <div style={{fontSize:10,color:"#475569"}}>
+                      Il totale si aggiorna automaticamente dal tab Debiti, ma puoi modificarlo manualmente
+                    </div>
+                  </>);
+                })()}
+              </Block>
             </>}
 
             {/* ── SPESE ── */}
@@ -1793,7 +1845,7 @@ export default function App() {
               <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14}}>
                 <Stat label="Contanti (−mov.)" val={eur(calc.spese_cont)} accent="#f87171"/>
                 <Stat label="Elettronico (−guad.)" val={eur(calc.spese_ele)} accent="#fb923c"/>
-                <Stat label="Totale spese" val={eur(calc.spese_cont+calc.spese_ele)} accent="#f87171" big/>
+                <Stat label="Totale spese" val={eur(calc.spese_tot)} accent="#f87171" big/>
               </div>
               {(today.spese||[]).map((sp,i)=>(
                 <div key={i} style={{background:"#0f1923",borderRadius:12,borderLeft:"4px solid #f87171",padding:14,marginBottom:10}}>
@@ -1821,6 +1873,74 @@ export default function App() {
               ))}
               <button onClick={addSpesa} style={{width:"100%",background:"#1a0a0a",color:"#f87171",border:"1px dashed #7f1d1d",borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ Aggiungi Spesa</button>
             </>}
+
+            {/* ── DEBITI CLIENTI ── */}
+            {tab==="debiti"&&(()=>{
+              const debiti = all[dbk()] || [];
+              const totAperti = debiti.filter(d=>!d.pagato).reduce((s,d)=>s+n(d.importo),0);
+              const totPagati = debiti.filter(d=>d.pagato).reduce((s,d)=>s+n(d.importo),0);
+              const saveDebiti = (lista) => { const u={...all,[dbk()]:lista}; setAll(u); persist(u); };
+              const addDebito = () => saveDebiti([...debiti,{nome:"",importo:"",data:new Date().toLocaleDateString("it-IT"),pagato:false,dataPagato:""}]);
+              const updDebito = (i,f,v) => { const d=[...debiti]; d[i]={...d[i],[f]:v}; saveDebiti(d); };
+              const delDebito = (i) => saveDebiti(debiti.filter((_,j)=>j!==i));
+              const flagPagato = (i) => {
+                const d=[...debiti];
+                d[i]={...d[i],pagato:!d[i].pagato,dataPagato:!d[i].pagato?new Date().toLocaleDateString("it-IT"):""};
+                saveDebiti(d);
+              };
+              return (<>
+                <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14}}>
+                  <Stat label="Debiti aperti" val={eur(totAperti)} accent="#f87171" big/>
+                  <Stat label="Incassati" val={eur(totPagati)} accent="#4ade80"/>
+                </div>
+                {debiti.length===0&&(
+                  <div style={{textAlign:"center",color:"#475569",padding:40,fontSize:13}}>
+                    Nessun debito registrato
+                  </div>
+                )}
+                {debiti.map((d,i)=>(
+                  <div key={i} style={{background:"#0f1923",borderRadius:12,
+                    borderLeft:`4px solid ${d.pagato?"#4ade80":"#f87171"}`,
+                    padding:14,marginBottom:10,opacity:d.pagato?0.6:1}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <span style={{fontSize:10,fontWeight:800,letterSpacing:1,
+                        color:d.pagato?"#4ade80":"#f87171"}}>
+                        {d.pagato?"✅ PAGATO":"🔴 APERTO"} #{i+1}
+                      </span>
+                      <div style={{display:"flex",gap:6}}>
+                        <button onClick={()=>flagPagato(i)}
+                          style={{background:d.pagato?"#052e16":"#450a0a",
+                            color:d.pagato?"#4ade80":"#f87171",
+                            border:"none",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>
+                          {d.pagato?"↩ Riapri":"✓ Pagato"}
+                        </button>
+                        <button onClick={()=>delDebito(i)}
+                          style={{background:"#1e293b",color:"#64748b",border:"none",borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                      </div>
+                    </div>
+                    <Row>
+                      <div style={{flex:"2 1 140px"}}>
+                        <Lbl c="Nome cliente"/>
+                        <Inp val={d.nome} set={v=>updDebito(i,"nome",v)} type="text" ph="es. Mario Rossi"/>
+                      </div>
+                      <Fld label="Importo (€)" val={d.importo} set={v=>updDebito(i,"importo",v)}/>
+                      <div style={{flex:"1 1 110px"}}>
+                        <Lbl c="Data"/>
+                        <Inp val={d.data} set={v=>updDebito(i,"data",v)} type="text" ph="gg/mm/aaaa"/>
+                      </div>
+                    </Row>
+                    {d.pagato&&d.dataPagato&&(
+                      <div style={{fontSize:10,color:"#4ade80",marginTop:6}}>Pagato il: {d.dataPagato}</div>
+                    )}
+                  </div>
+                ))}
+                <button onClick={addDebito}
+                  style={{width:"100%",background:"#1a0505",color:"#f87171",border:"2px dashed #7f1d1d",
+                    borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:4}}>
+                  + Aggiungi debito
+                </button>
+              </>);
+            })()}
 
             {/* ── VERSAMENTI ── */}
             {tab==="versamenti"&&<>
@@ -2294,11 +2414,12 @@ export default function App() {
                 <Stat label="Movimento oggi" val={eur(calc.movimento)} accent="#4ade80" big/>
                 <Stat label="Guadagno oggi" val={eur(calc.guadagno)} accent={calc.guadagno>=0?"#60a5fa":"#f87171"} big/>
                 <Stat label="Cassa accumulata" val={eur(cassaOggi)} accent={cassaOggi>=0?"#a78bfa":"#f87171"} big/>
+                <Stat label="Spese oggi" val={eur(calc.spese_tot)} accent="#f87171"/>
               </div>
 
               <Block title="Dettaglio Movimento Contante" accent="#4ade80">
                 {[
-                  ["Bar", n(today.bar), "#4ade80"],
+                  ["Bar (contante)", n(today.bar)-n(today.pos_bar), "#4ade80"],
                   ["Ristorante", n(today.risto), "#4ade80"],
                   ["Tabacchi rimasti", calc.tab_rim, "#fbbf24"],
                   ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
@@ -2313,7 +2434,7 @@ export default function App() {
                   ["Slot raccolto", n(today.slot_raccolto), "#e879f9"],
                   ["Slot monete", n(today.slot_monete), "#e879f9"],
                   ["− Slot refill", -n(today.slot_refill), "#f87171"],
-                  ["PF (oggi−domani)", calc.pf_diff, calc.pf_diff>=0?"#4ade80":"#f87171"],
+                  ["PF (ieri−domani)", calc.pf_diff, calc.pf_diff>=0?"#4ade80":"#f87171"],
                   ["Monete (oggi−domani)", calc.monete_diff, calc.monete_diff>=0?"#4ade80":"#f87171"],
                   ["Debiti (oggi−domani)", calc.debiti_diff, calc.debiti_diff>=0?"#4ade80":"#f87171"],
                   ["− Spese contanti", -calc.spese_cont, "#f87171"],
@@ -2324,14 +2445,19 @@ export default function App() {
 
               <Block title="Dettaglio Guadagno" accent="#60a5fa">
                 {[
-                  ["Bar", n(today.bar), "#4ade80"],
-                  ["Ristorante", n(today.risto), "#4ade80"],
-                  ["POS Bar", n(today.pos_bar), "#a78bfa"],
+                  ["Bar+Risto (incl. POS)", n(today.bar)+n(today.risto), "#4ade80"],
                   ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
                   ["− Spese contanti", -calc.spese_cont, "#f87171"],
                   ["− Spese elettronico", -calc.spese_ele, "#fb923c"],
                 ].filter(([,v])=>v!==0).map(([l,v,c])=><RRow key={l} label={l} val={eur(v,true)} color={c}/>)}
+                {n(today.pos_bar)>0&&<RRow label="di cui POS Bar" val={eur(n(today.pos_bar))} color="#a78bfa"/>}
                 <RRow label="GUADAGNO GIORNO" val={eur(calc.guadagno)} color={calc.guadagno>=0?"#60a5fa":"#f87171"} bold/>
+              </Block>
+
+              <Block title="Spese Giornaliere" accent="#f87171">
+                <RRow label="Spese contanti" val={eur(calc.spese_cont)} color="#f87171"/>
+                <RRow label="Spese elettronico" val={eur(calc.spese_ele)} color="#fb923c"/>
+                <RRow label="TOTALE SPESE" val={eur(calc.spese_tot)} color="#f87171" bold/>
               </Block>
 
               <Block title={"Aggi — "+MONTHS[month]+" "+year} accent="#fbbf24">
