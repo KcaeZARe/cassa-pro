@@ -590,10 +590,10 @@ const emptyDay = () => ({
   gratta_venduto:"", gratta_pagati:"",
   lotto_venduto:"", lotto_pagati:"",
   toto:"", virtual:"",
-  lis:"", sisal:"", valori:"",
+  lis:"", sisal:"", valori:"", servizi:"",
   dist_prelievo:"", dist_nota:"",
   slot_raccolto:"", slot_refill:"", slot_monete:"", slot_note:"",
-  pf_ieri:"", pf_domani:"",   // PF ieri = auto da ieri; PF domani = quanto lasci stasera
+  pf_ieri:"", pf_domani:"",
   monete_oggi:"", monete_domani:"",
   debiti_oggi:"", debiti_domani:"",
   arrotondamento:"",
@@ -805,13 +805,14 @@ function calcDay(t) {
   const movimento =
     n(t.bar) + n(t.risto) - pos_bar
     + tab_rim + gratta_rim + lotto_rim
-    + n(t.art_tabacchi) + n(t.toto) + n(t.virtual) + n(t.lis) + n(t.sisal) + n(t.valori)
+    + n(t.art_tabacchi) + n(t.toto) + n(t.virtual) + n(t.lis) + n(t.sisal) + n(t.valori) + n(t.servizi)
     + n(t.dist_prelievo)
     + n(t.slot_raccolto) + n(t.slot_monete) - n(t.slot_refill)
     + pf_diff + monete_diff + debiti_diff
     - spese_cont
     + n(t.arrotondamento);
-  // Guadagno: economico (bar+risto già comprende POS, non aggiungiamo pos_bar)
+  // Guadagno: solo ricavi propri dell'attività (bar, risto, articoli tabacchi)
+  // Giochi, servizi e distributore sono solo transito — entrano nel movimento ma non nel guadagno
   const guadagno = n(t.bar) + n(t.risto) + n(t.art_tabacchi) - spese_cont - spese_ele;
   return { tab_rim, gratta_rim, lotto_rim, spese_cont, spese_ele, spese_tot, pf_diff, monete_diff, debiti_diff, movimento, guadagno, pos_bar };
 }
@@ -876,6 +877,28 @@ const TABS = [
   {id:"annuale",label:"📅 Annuale"},
   {id:"riepilogo",label:"📊 Totali"},
 ];
+
+// Campi opzionali — possono essere disattivati dalle impostazioni
+const OPTIONAL_FIELDS = [
+  {id:"virtual",  label:"Virtual",        tab:"giochi"},
+  {id:"lis",      label:"LIS",            tab:"giochi"},
+  {id:"sisal",    label:"SISAL",          tab:"giochi"},
+  {id:"valori",   label:"Valori Bollati", tab:"giochi"},
+  {id:"servizi",  label:"Servizi",        tab:"giochi"},
+  {id:"toto",     label:"Scommesse",      tab:"giochi"},
+  {id:"dist",     label:"Distributore",   tab:"incassi"},
+  {id:"pos_bar",  label:"POS Bar",        tab:"incassi"},
+  {id:"risto",    label:"Ristorante",     tab:"incassi"},
+];
+
+// Tab opzionali — incassi e riepilogo non si possono nascondere
+const OPTIONAL_TABS = ["giochi","slot","cassa","spese","versamenti","aggi","personale","pagamenti","annuale"];
+
+const SETTINGS_KEY = "cassapro_settings_v1";
+const loadSettings = () => {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)||"{}"); } catch { return {}; }
+};
+const saveSettings = (s) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 
 // ── VISTA DIPENDENTE ───────────────────────────────────────
 // dipIdx = indice del dipendente già autenticato (non può cambiare)
@@ -1229,6 +1252,11 @@ export default function App() {
   const [month, setMonth] = useState(now.getMonth());
   const [day, setDay] = useState(now.getDate());
   const [tab, setTab] = useState("incassi");
+  const [showSettings, setShowSettings] = useState(false);
+  const [settings, setSettings] = useState(loadSettings);
+  const updSetting = (k, v) => { const s={...settings,[k]:v}; setSettings(s); saveSettings(s); };
+  const fieldOn  = (id) => settings[`field_${id}`] !== false;  // default ON
+  const tabOn    = (id) => settings[`tab_${id}`]   !== false;  // default ON
   const [view, setView] = useState("day"); // "day" | "month" | "annual"
   const [flash, setFlash] = useState(false);
   const [selDip, setSelDip] = useState(null);
@@ -1594,6 +1622,13 @@ export default function App() {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"var(--cp-bg3)",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            {/* Pulsante impostazioni */}
+            <button onClick={()=>setShowSettings(s=>!s)}
+              title="Impostazioni"
+              style={{background:showSettings?"#1e3a5f":T.bg2,color:showSettings?"#60a5fa":T.text3,
+                border:`1px solid ${T.border}`,padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              ⚙️
+            </button>
             {/* Pulsante tema */}
             <button onClick={()=>{ const nd=!darkMode; setDarkMode(nd); localStorage.setItem("cassapro_theme",nd?"dark":"light"); }}
               title="Cambia tema"
@@ -1803,11 +1838,49 @@ export default function App() {
         );
       })()}
 
+      {/* ── PANNELLO IMPOSTAZIONI ── */}
+      {showSettings&&(
+        <div style={{background:"var(--cp-bg2)",borderBottom:"2px solid #60a5fa",padding:16}}>
+          <div style={{fontSize:11,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:14}}>⚙️ IMPOSTAZIONI</div>
+
+          {/* Campi opzionali */}
+          <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:800,letterSpacing:1,marginBottom:8}}>CAMPI ATTIVI</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+            {OPTIONAL_FIELDS.map(f=>(
+              <button key={f.id} onClick={()=>updSetting(`field_${f.id}`,!fieldOn(f.id))}
+                style={{background:fieldOn(f.id)?"#052e16":"var(--cp-bg3)",
+                  color:fieldOn(f.id)?"#4ade80":"var(--cp-text4)",
+                  border:`1px solid ${fieldOn(f.id)?"#166534":"var(--cp-border)"}`,
+                  borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,
+                  cursor:"pointer",fontFamily:"inherit"}}>
+                {fieldOn(f.id)?"✓ ":""}{f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab opzionali */}
+          <div style={{fontSize:10,color:"var(--cp-text3)",fontWeight:800,letterSpacing:1,marginBottom:8}}>TAB VISIBILI</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+            {TABS.filter(t=>OPTIONAL_TABS.includes(t.id)).map(t=>(
+              <button key={t.id} onClick={()=>updSetting(`tab_${t.id}`,!tabOn(t.id))}
+                style={{background:tabOn(t.id)?"#0a1a2a":"var(--cp-bg3)",
+                  color:tabOn(t.id)?"#60a5fa":"var(--cp-text4)",
+                  border:`1px solid ${tabOn(t.id)?"#1e3a5f":"var(--cp-border)"}`,
+                  borderRadius:20,padding:"5px 12px",fontSize:11,fontWeight:700,
+                  cursor:"pointer",fontFamily:"inherit"}}>
+                {tabOn(t.id)?"✓ ":""}{t.label}
+              </button>
+            ))}
+          </div>
+          <div style={{fontSize:10,color:"var(--cp-text4)"}}>Incassi e Totali sono sempre visibili</div>
+        </div>
+      )}
+
       {/* ── VISTA GIORNO ── */}
       {view==="day"&&(
         <>
           <div style={{display:"flex",overflowX:"auto",borderBottom:"1px solid #1e293b",background:"var(--cp-bg)"}}>
-            {TABS.map(t=>(
+            {TABS.filter(t=>!OPTIONAL_TABS.includes(t.id)||tabOn(t.id)).map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
                 style={{flex:"0 0 auto",padding:"12px 12px",background:"transparent",color:tab===t.id?"var(--cp-text)":"var(--cp-text4)",border:"none",borderBottom:tab===t.id?"2px solid #4ade80":"2px solid transparent",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
                 {t.label}
@@ -1820,8 +1893,15 @@ export default function App() {
             {/* ── INCASSI ── */}
             {tab==="incassi"&&<>
               <Block title="Bar e Ristorazione" accent="#4ade80">
-                <Row><Fld label="Bar (€)" val={today.bar} set={v=>upd("bar",v)}/><Fld label="Ristorante (€)" val={today.risto} set={v=>upd("risto",v)}/><Fld label="POS Bar (€)" val={today.pos_bar} set={v=>upd("pos_bar",v)}/></Row>
-                <Row><Calc label="Bar+Risto contante" val={n(today.bar)+n(today.risto)} color="#4ade80"/><Calc label="POS Bar (solo guadagno)" val={n(today.pos_bar)} color="#a78bfa"/></Row>
+                <Row>
+                  <Fld label="Bar (€)" val={today.bar} set={v=>upd("bar",v)}/>
+                  {fieldOn("risto")&&<Fld label="Ristorante (€)" val={today.risto} set={v=>upd("risto",v)}/>}
+                  {fieldOn("pos_bar")&&<Fld label="POS Bar (€)" val={today.pos_bar} set={v=>upd("pos_bar",v)}/>}
+                </Row>
+                <Row>
+                  <Calc label="Bar+Risto contante" val={n(today.bar)+n(today.risto)-n(today.pos_bar)} color="#4ade80"/>
+                  {fieldOn("pos_bar")&&<Calc label="POS Bar (solo guadagno)" val={n(today.pos_bar)} color="#a78bfa"/>}
+                </Row>
               </Block>
               <Block title="Tabacchi" accent="#fbbf24">
                 <Row><Fld label="Venduto (€)" val={today.tab_venduto} set={v=>upd("tab_venduto",v)}/><Fld label="POS Tabacchi (€)" val={today.tab_pos} set={v=>upd("tab_pos",v)}/><Calc label="Rimasti (V−POS)" val={calc.tab_rim} color="#fbbf24"/></Row>
@@ -1830,16 +1910,18 @@ export default function App() {
                 <Row><Fld label="Incasso Articoli (€)" val={today.art_tabacchi} set={v=>upd("art_tabacchi",v)}/></Row>
                 <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:6}}>↑ Entra nel movimento come il Bar</div>
               </Block>
-              <Block title="Distributore Sigarette" accent="#f97316">
-                <Row>
-                  <Fld label="Prelievo (€)" val={today.dist_prelievo} set={v=>upd("dist_prelievo",v)}/>
-                  <div style={{flex:"2 1 200px"}}><Lbl c="Ora e Note"/><Inp val={today.dist_nota} set={v=>upd("dist_nota",v)} type="text" ph="es. 14:30 — prelievo"/></div>
-                </Row>
+              {fieldOn("dist")&&(
+                <Block title="Distributore Sigarette" accent="#f97316">
+                  <Row>
+                    <Fld label="Prelievo (€)" val={today.dist_prelievo} set={v=>upd("dist_prelievo",v)}/>
+                    <div style={{flex:"2 1 200px"}}><Lbl c="Ora e Note"/><Inp val={today.dist_nota} set={v=>upd("dist_nota",v)} type="text" ph="es. 14:30 — prelievo"/></div>
+                  </Row>
                 <Row>
                   <Fld label="Slot POS (€)" val={today.dist_slot_pos} set={v=>upd("dist_slot_pos",v)}/>
                   <div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"var(--cp-text4)"}}>📝 Solo annotazione — non incide sui conti</span></div>
                 </Row>
               </Block>
+              )}
               <Block title="Arrotondamento" accent="var(--cp-text2)">
                 <Row><Fld label="± Arrotondamento (€)" val={today.arrotondamento} set={v=>upd("arrotondamento",v)}/><div style={{flex:2,display:"flex",alignItems:"flex-end",paddingBottom:10}}><span style={{fontSize:11,color:"var(--cp-text4)"}}>Valore ± per eliminare i decimali</span></div></Row>
               </Block>
@@ -1853,10 +1935,27 @@ export default function App() {
               <Block title="Lotto" accent="#f97316">
                 <Row><Fld label="Venduto (€)" val={today.lotto_venduto} set={v=>upd("lotto_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.lotto_pagati} set={v=>upd("lotto_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.lotto_rim} color="#f97316"/></Row>
               </Block>
-              <Block title="Scommesse / Virtual / LIS / SISAL / Valori" accent="#34d399">
-                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:10}}>↓ Inserisci direttamente la rimanenza già calcolata</div>
-                <Row><Fld label="Scommesse (€)" val={today.toto} set={v=>upd("toto",v)}/><Fld label="Virtual (€)" val={today.virtual} set={v=>upd("virtual",v)}/></Row>
-                <Row><Fld label="LIS (€)" val={today.lis} set={v=>upd("lis",v)}/><Fld label="SISAL (€)" val={today.sisal} set={v=>upd("sisal",v)}/><Fld label="Valori Bollati (€)" val={today.valori} set={v=>upd("valori",v)}/></Row>
+              <Block title="Altri Giochi e Servizi" accent="#34d399">
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:10}}>↓ Inserisci la rimanenza già calcolata — attiva/disattiva i campi dalle ⚙️ Impostazioni</div>
+                <Row>
+                  {fieldOn("toto")&&<Fld label="Scommesse (€)" val={today.toto} set={v=>upd("toto",v)}/>}
+                  {fieldOn("virtual")&&<Fld label="Virtual (€)" val={today.virtual} set={v=>upd("virtual",v)}/>}
+                </Row>
+                <Row>
+                  {fieldOn("lis")&&<Fld label="LIS (€)" val={today.lis} set={v=>upd("lis",v)}/>}
+                  {fieldOn("sisal")&&<Fld label="SISAL (€)" val={today.sisal} set={v=>upd("sisal",v)}/>}
+                  {fieldOn("valori")&&<Fld label="Valori Bollati (€)" val={today.valori} set={v=>upd("valori",v)}/>}
+                </Row>
+                {fieldOn("servizi")&&(
+                  <Row>
+                    <Fld label="Servizi (€)" val={today.servizi} set={v=>upd("servizi",v)} flex="1 1 100%"/>
+                  </Row>
+                )}
+                {!fieldOn("toto")&&!fieldOn("virtual")&&!fieldOn("lis")&&!fieldOn("sisal")&&!fieldOn("valori")&&!fieldOn("servizi")&&(
+                  <div style={{textAlign:"center",color:"var(--cp-text4)",padding:"16px 0",fontSize:12}}>
+                    Tutti i campi disattivati — riattivali dalle ⚙️ Impostazioni
+                  </div>
+                )}
               </Block>
             </>}
 
@@ -2550,14 +2649,28 @@ export default function App() {
               </div>
 
               <Block title="Dettaglio Movimento Contante" accent="#4ade80">
-                {[
-                  ["Bar (contante)", n(today.bar)-n(today.pos_bar), "#4ade80"],
-                  ["Ristorante", n(today.risto), "#4ade80"],
-                  ["Tabacchi rimasti", calc.tab_rim, "#fbbf24"],
-                  ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
-                  ["Gratta rimasti", calc.gratta_rim, "#facc15"],
-                  ["Lotto rimasti", calc.lotto_rim, "#f97316"],
-                  ["Scommesse", n(today.toto), "#34d399"],
+                {/* Bar */}
+                {n(today.bar)>0&&<RRow label="Bar (totale incasso)" val={eur(n(today.bar),true)} color="#4ade80"/>}
+                {n(today.pos_bar)>0&&<RRow label="  − POS Bar" val={eur(-n(today.pos_bar),true)} color="#f87171"/>}
+                {n(today.bar)>0&&<RRow label="  = Bar (contante)" val={eur(n(today.bar)-n(today.pos_bar),true)} color="#4ade80"/>}
+                {/* Ristorante */}
+                {n(today.risto)>0&&<RRow label="Ristorante" val={eur(n(today.risto),true)} color="#4ade80"/>}
+                {/* Tabacchi */}
+                {n(today.tab_venduto)>0&&<RRow label="Tabacchi (venduto)" val={eur(n(today.tab_venduto),true)} color="#fbbf24"/>}
+                {n(today.tab_pos)>0&&<RRow label="  − POS Tabacchi" val={eur(-n(today.tab_pos),true)} color="#f87171"/>}
+                {n(today.tab_venduto)>0&&<RRow label="  = Tabacchi (rimasti)" val={eur(calc.tab_rim,true)} color="#fbbf24"/>}
+                {/* Articoli Tabacchi */}
+                {n(today.art_tabacchi)>0&&<RRow label="Articoli Tabacchi" val={eur(n(today.art_tabacchi),true)} color="#a3e635"/>}
+                {/* Gratta */}
+                {n(today.gratta_venduto)>0&&<RRow label="Gratta (venduto)" val={eur(n(today.gratta_venduto),true)} color="#facc15"/>}
+                {n(today.gratta_pagati)>0&&<RRow label="  − Gratta (pagati)" val={eur(-n(today.gratta_pagati),true)} color="#f87171"/>}
+                {n(today.gratta_venduto)>0&&<RRow label="  = Gratta (rimasti)" val={eur(calc.gratta_rim,true)} color="#facc15"/>}
+                {/* Lotto */}
+                {n(today.lotto_venduto)>0&&<RRow label="Lotto (venduto)" val={eur(n(today.lotto_venduto),true)} color="#f97316"/>}
+                {n(today.lotto_pagati)>0&&<RRow label="  − Lotto (pagati)" val={eur(-n(today.lotto_pagati),true)} color="#f87171"/>}
+                {n(today.lotto_venduto)>0&&<RRow label="  = Lotto (rimasti)" val={eur(calc.lotto_rim,true)} color="#f97316"/>}
+                {/* Altri */}
+                {n(today.servizi)>0&&<RRow label="Servizi" val={eur(n(today.servizi),true)} color="#34d399"/>}
                   ["Virtual", n(today.virtual), "#60a5fa"],
                   ["LIS", n(today.lis), "#c084fc"],
                   ["SISAL", n(today.sisal), "#c084fc"],
@@ -2572,10 +2685,14 @@ export default function App() {
                   ["− Spese contanti", -calc.spese_cont, "#f87171"],
                   ["± Arrotondamento", n(today.arrotondamento), "var(--cp-text2)"],
                 ].filter(([,v])=>v!==0).map(([l,v,c])=><RRow key={l} label={l} val={eur(v,true)} color={c}/>)}
+                <div style={{height:4}}/>
                 <RRow label="TOTALE MOVIMENTO" val={eur(calc.movimento)} color="#4ade80" bold/>
               </Block>
 
               <Block title="Dettaglio Guadagno" accent="#60a5fa">
+                <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:8}}>
+                  Giochi, Servizi e Distributore confluiscono solo nel movimento — il guadagno è coperto dagli Aggi
+                </div>
                 {[
                   ["Bar+Risto (incl. POS)", n(today.bar)+n(today.risto), "#4ade80"],
                   ["Articoli Tabacchi", n(today.art_tabacchi), "#a3e635"],
@@ -2806,6 +2923,19 @@ export default function App() {
           </div>
         )}
       </>}
+
+      {/* Footer copyright */}
+      <div style={{textAlign:"center",padding:"24px 16px 32px",borderTop:"1px solid var(--cp-border)",marginTop:8}}>
+        <div style={{fontSize:10,color:"var(--cp-text4)",letterSpacing:0.5,lineHeight:1.8}}>
+          © 2026 Leonardo Liu
+        </div>
+        <div style={{fontSize:9,color:"var(--cp-text4)",opacity:0.6,marginTop:2,letterSpacing:0.5}}>
+          Idea e proprietà intellettuale di Leonardo Liu
+        </div>
+        <div style={{fontSize:9,color:"var(--cp-text4)",opacity:0.4,marginTop:1,letterSpacing:0.5}}>
+          Sviluppato con Claude AI · Anthropic
+        </div>
+      </div>
 
     </div>
   );
