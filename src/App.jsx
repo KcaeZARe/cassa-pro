@@ -2715,7 +2715,41 @@ export default function App() {
                 <RRow label="Spese contanti" val={eur(calc.spese_cont)} color="#f87171"/>
                 <RRow label="Spese elettronico" val={eur(calc.spese_ele)} color="#fb923c"/>
                 <RRow label="TOTALE SPESE" val={eur(calc.spese_tot)} color="#f87171" bold/>
+                {(today.spese||[]).length>0&&<>
+                  <div style={{height:8}}/>
+                  <div style={{fontSize:10,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:6}}>DETTAGLIO</div>
+                  {/* Contanti */}
+                  {(today.spese||[]).filter(s=>n(s.contante)>0).length>0&&<>
+                    <div style={{fontSize:10,color:"#f87171",fontWeight:700,margin:"4px 0 2px"}}>💵 CONTANTI</div>
+                    {(today.spese||[]).filter(s=>n(s.contante)>0).map((s,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 8px",fontSize:12,borderBottom:"1px solid var(--cp-bg4)"}}>
+                        <span style={{color:"var(--cp-text2)"}}>{s.dove||"—"}{s.tipo&&s.tipo!=="merce"?` (${s.tipo})`:""}</span>
+                        <span style={{color:"#f87171",fontWeight:700}}>−{eur(n(s.contante))}</span>
+                      </div>
+                    ))}
+                  </>}
+                  {/* Elettronico */}
+                  {(today.spese||[]).filter(s=>n(s.elettronico)>0).length>0&&<>
+                    <div style={{fontSize:10,color:"#fb923c",fontWeight:700,margin:"8px 0 2px"}}>💳 ELETTRONICO</div>
+                    {(today.spese||[]).filter(s=>n(s.elettronico)>0).map((s,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 8px",fontSize:12,borderBottom:"1px solid var(--cp-bg4)"}}>
+                        <span style={{color:"var(--cp-text2)"}}>{s.dove||"—"}{s.tipo&&s.tipo!=="merce"?` (${s.tipo})`:""}</span>
+                        <span style={{color:"#fb923c",fontWeight:700}}>−{eur(n(s.elettronico))}</span>
+                      </div>
+                    ))}
+                  </>}
+                </>}
               </Block>
+
+              {/* POS Distributore — solo annotazione */}
+              {n(today.dist_slot_pos)>0&&(
+                <Block title="POS Distributore" accent="var(--cp-text4)">
+                  <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:6}}>
+                    📝 Solo annotazione — non influisce su movimento né guadagno
+                  </div>
+                  <RRow label="POS Distributore" val={eur(n(today.dist_slot_pos))} color="var(--cp-text3)"/>
+                </Block>
+              )}
 
               <Block title={"Aggi — "+MONTHS[month]+" "+year} accent="#fbbf24">
                 <RRow label="Aggi Bar" val={eur(totAggiBar)} color="#4ade80"/>
