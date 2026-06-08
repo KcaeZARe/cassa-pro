@@ -880,6 +880,8 @@ const TABS = [
 
 // Campi opzionali — possono essere disattivati dalle impostazioni
 const OPTIONAL_FIELDS = [
+  {id:"gratta",   label:"Gratta e Vinci", tab:"giochi"},
+  {id:"lotto",    label:"Lotto",          tab:"giochi"},
   {id:"virtual",  label:"Virtual",        tab:"giochi"},
   {id:"lis",      label:"LIS",            tab:"giochi"},
   {id:"sisal",    label:"SISAL",          tab:"giochi"},
@@ -1929,12 +1931,16 @@ export default function App() {
 
             {/* ── GIOCHI ── */}
             {tab==="giochi"&&<>
-              <Block title="Gratta e Vinci" accent="#facc15">
-                <Row><Fld label="Venduto (€)" val={today.gratta_venduto} set={v=>upd("gratta_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.gratta_pagati} set={v=>upd("gratta_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.gratta_rim} color="#facc15"/></Row>
-              </Block>
-              <Block title="Lotto" accent="#f97316">
-                <Row><Fld label="Venduto (€)" val={today.lotto_venduto} set={v=>upd("lotto_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.lotto_pagati} set={v=>upd("lotto_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.lotto_rim} color="#f97316"/></Row>
-              </Block>
+              {fieldOn("gratta")&&(
+                <Block title="Gratta e Vinci" accent="#facc15">
+                  <Row><Fld label="Venduto (€)" val={today.gratta_venduto} set={v=>upd("gratta_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.gratta_pagati} set={v=>upd("gratta_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.gratta_rim} color="#facc15"/></Row>
+                </Block>
+              )}
+              {fieldOn("lotto")&&(
+                <Block title="Lotto" accent="#f97316">
+                  <Row><Fld label="Venduto (€)" val={today.lotto_venduto} set={v=>upd("lotto_venduto",v)}/><Fld label="Pagati ai clienti (€)" val={today.lotto_pagati} set={v=>upd("lotto_pagati",v)}/><Calc label="Rimasti (V−P)" val={calc.lotto_rim} color="#f97316"/></Row>
+                </Block>
+              )}
               <Block title="Altri Giochi e Servizi" accent="#34d399">
                 <div style={{fontSize:10,color:"var(--cp-text4)",marginBottom:10}}>↓ Inserisci la rimanenza già calcolata — attiva/disattiva i campi dalle ⚙️ Impostazioni</div>
                 <Row>
@@ -2669,12 +2675,14 @@ export default function App() {
                 {n(today.lotto_venduto)>0&&<RRow label="Lotto (venduto)" val={eur(n(today.lotto_venduto),true)} color="#f97316"/>}
                 {n(today.lotto_pagati)>0&&<RRow label="  − Lotto (pagati)" val={eur(-n(today.lotto_pagati),true)} color="#f87171"/>}
                 {n(today.lotto_venduto)>0&&<RRow label="  = Lotto (rimasti)" val={eur(calc.lotto_rim,true)} color="#f97316"/>}
-                {/* Altri */}
-                {n(today.servizi)>0&&<RRow label="Servizi" val={eur(n(today.servizi),true)} color="#34d399"/>}
+                {/* Altri — solo movimento */}
+                {[
+                  ["Scommesse", n(today.toto), "#34d399"],
                   ["Virtual", n(today.virtual), "#60a5fa"],
                   ["LIS", n(today.lis), "#c084fc"],
                   ["SISAL", n(today.sisal), "#c084fc"],
                   ["Valori Bollati", n(today.valori), "#c084fc"],
+                  ["Servizi", n(today.servizi), "#34d399"],
                   ["Distributore", n(today.dist_prelievo), "#f97316"],
                   ["Slot raccolto", n(today.slot_raccolto), "#e879f9"],
                   ["Slot monete", n(today.slot_monete), "#e879f9"],
