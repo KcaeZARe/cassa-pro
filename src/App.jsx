@@ -785,6 +785,61 @@ const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
   XLSX.writeFile(wb, `CassaPro_${MONTHS[month]}_${year}.xlsx`);
 };
 
+// Export Excel anno intero — un foglio per mese + foglio riepilogo annuale
+const exportExcelAnno = (year, all, MONTHS, dim, dk, vk, mk, pk, AGGI_BAR_VOCI, AGGI_TAB_VOCI, aggiLabel, calcDay, n, eur) => {
+  const XLSX = window.XLSX;
+  if (!XLSX) { console.error("SheetJS non caricato"); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Foglio riepilogo annuale
+  const riepRows = [["Mese","Movimento","Guadagno","Aggi","Guad+Aggi","Versato","Spese Tot","Merce Cont","Fissi Cont","Merce Ele","Fissi Ele"]];
+  let totMov=0,totGuad=0,totAggi=0,totVers=0,totSp=0;
+
+  MONTHS.forEach((mName, mi) => {
+    const mDays = dim(year, mi);
+    let mov=0,guad=0,versato=0,aggiTot=0,spTot=0,spMerceCont=0,spFissoCont=0,spMerceEle=0,spFissoEle=0;
+    for (let d=1; d<=mDays; d++) {
+      const dd = all[dk(year,mi,d)];
+      if (!dd) continue;
+      const c = calcDay(dd);
+      mov+=c.movimento; guad+=c.guadagno; spTot+=c.spese_tot;
+      (dd.spese||[]).forEach(s=>{
+        const tipo=s.tipo==="fisso"?"fisso":"merce";
+        if(tipo==="merce"){spMerceCont+=n(s.contante);spMerceEle+=n(s.elettronico);}
+        else{spFissoCont+=n(s.contante);spFissoEle+=n(s.elettronico);}
+      });
+    }
+    const vers = all[vk(year,mi)]||[];
+    versato = vers.reduce((s,v)=>s+n(v.importo),0);
+    const aggi = all[mk(year,mi)]||{};
+    aggiTot = [...AGGI_BAR_VOCI,...AGGI_TAB_VOCI].reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
+    totMov+=mov; totGuad+=guad; totAggi+=aggiTot; totVers+=versato; totSp+=spTot;
+    riepRows.push([mName,mov,guad,aggiTot,guad+aggiTot,versato,spTot,spMerceCont,spFissoCont,spMerceEle,spFissoEle]);
+
+    // Foglio per ogni mese con dati
+    if (mov!==0||guad!==0) {
+      const rows=[["G","Bar","Risto","Tab.Rim","Gratta","Lotto","Slot","Mov.","Guad.","SpCont","SpEle"]];
+      for(let d=1;d<=mDays;d++){
+        const dd=all[dk(year,mi,d)];
+        if(!dd) continue;
+        const c=calcDay(dd);
+        if(!n(dd.bar)&&!n(dd.risto)&&!c.movimento) continue;
+        rows.push([d,n(dd.bar),n(dd.risto),c.tab_rim,c.gratta_rim,c.lotto_rim,n(dd.slot_raccolto),c.movimento,c.guadagno,c.spese_cont,c.spese_ele]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = rows[0].map(()=>({wch:10}));
+      XLSX.utils.book_append_sheet(wb, ws, mName.slice(0,3)+year);
+    }
+  });
+
+  riepRows.push(["TOTALE",totMov,totGuad,totAggi,totGuad+totAggi,totVers,totSp,"","","",""]);
+  const wsR = XLSX.utils.aoa_to_sheet(riepRows);
+  wsR["!cols"] = riepRows[0].map(()=>({wch:14}));
+  XLSX.utils.book_append_sheet(wb, wsR, `Riepilogo ${year}`);
+
+  XLSX.writeFile(wb, `CassaPro_Anno_${year}.xlsx`);
+};
+
 const TIPO_IT    = { lavoro:"Lavoro", malattia:"Malattia", permesso:"Permesso", assenza:"Assenza", ferie:"Ferie" };
 const TIPO_COLOR = { lavoro:"#4ade80", malattia:"#f87171", permesso:"#fbbf24", assenza:"#f87171", ferie:"#60a5fa" };
 
@@ -1255,6 +1310,8 @@ export default function App() {
   const [day, setDay] = useState(now.getDate());
   const [tab, setTab] = useState("incassi");
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [settings, setSettings] = useState(loadSettings);
   const updSetting = (k, v) => { const s={...settings,[k]:v}; setSettings(s); saveSettings(s); };
   const fieldOn  = (id) => settings[`field_${id}`] !== false;  // default ON
@@ -1636,6 +1693,13 @@ export default function App() {
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {flash&&<span style={{background:"var(--cp-bg3)",color:"#4ade80",padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>✓ SALVATO</span>}
+            {/* Pulsante ricerca */}
+            <button onClick={()=>{ setShowSearch(s=>!s); setShowSettings(false); }}
+              title="Ricerca"
+              style={{background:showSearch?"#1e3a5f":T.bg2,color:showSearch?"#60a5fa":T.text3,
+                border:`1px solid ${T.border}`,padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              🔍
+            </button>
             {/* Pulsante impostazioni */}
             <button onClick={()=>setShowSettings(s=>!s)}
               title="Impostazioni"
@@ -1763,9 +1827,18 @@ export default function App() {
         const annualData = MONTHS.map((mName, mi) => {
           const mDays = dim(year, mi);
           let mov=0, guad=0, versato=0, aggiBar=0, aggiTab=0;
+          let spCont=0, spEle=0, spMerceCont=0, spFissoCont=0, spMerceEle=0, spFissoEle=0;
           for (let d=1; d<=mDays; d++) {
             const dd = all[dk(year,mi,d)];
-            if (hasRealData(dd)) { const c=calcDay(dd); mov+=c.movimento; guad+=c.guadagno; }
+            if (hasRealData(dd)) {
+              const c=calcDay(dd); mov+=c.movimento; guad+=c.guadagno;
+              spCont+=c.spese_cont; spEle+=c.spese_ele;
+              (dd.spese||[]).forEach(s=>{
+                const tipo = s.tipo==="fisso"?"fisso":"merce";
+                if(tipo==="merce"){ spMerceCont+=n(s.contante); spMerceEle+=n(s.elettronico); }
+                else              { spFissoCont+=n(s.contante); spFissoEle+=n(s.elettronico); }
+              });
+            }
           }
           const vers = all[vk(year,mi)]||[];
           versato = vers.reduce((s,v)=>s+n(v.importo),0);
@@ -1773,15 +1846,21 @@ export default function App() {
           aggiBar = AGGI_BAR_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
           aggiTab = AGGI_TAB_VOCI.reduce((s,v)=>(aggi[v]||[]).reduce((ss,a)=>ss+n(a.importo),s),0);
           const hasData = mov!==0||guad!==0;
-          return { mName, mi, mov, guad, versato, aggi:aggiBar+aggiTab, hasData };
+          return { mName, mi, mov, guad, versato, aggi:aggiBar+aggiTab, hasData,
+            spCont, spEle, spTot:spCont+spEle, spMerceCont, spFissoCont, spMerceEle, spFissoEle };
         });
         const totMov   = annualData.reduce((s,m)=>s+m.mov,0);
         const totGuad  = annualData.reduce((s,m)=>s+m.guad,0);
         const totVers  = annualData.reduce((s,m)=>s+m.versato,0);
         const totAggiA = annualData.reduce((s,m)=>s+m.aggi,0);
-        // scala per grafico
+        const totSpA   = annualData.reduce((s,m)=>s+m.spTot,0);
+        const totSpMerceCont = annualData.reduce((s,m)=>s+m.spMerceCont,0);
+        const totSpFissoCont = annualData.reduce((s,m)=>s+m.spFissoCont,0);
+        const totSpMerceEle  = annualData.reduce((s,m)=>s+m.spMerceEle,0);
+        const totSpFissoEle  = annualData.reduce((s,m)=>s+m.spFissoEle,0);
         const maxMov  = Math.max(...annualData.map(m=>Math.abs(m.mov)),1);
         const maxGuad = Math.max(...annualData.map(m=>Math.abs(m.guad)),1);
+        const maxSp   = Math.max(...annualData.map(m=>m.spTot),1);
         return (
           <div style={{padding:16}}>
             <div style={{fontSize:16,fontWeight:800,marginBottom:4}}>📅 Anno {year}</div>
@@ -1794,6 +1873,7 @@ export default function App() {
               <Stat label="Aggi anno" val={eur(totAggiA)} accent="#fbbf24"/>
               <Stat label="Guad.+Aggi" val={eur(totGuad+totAggiA)} accent={totGuad+totAggiA>=0?"#4ade80":"#f87171"} big/>
               <Stat label="Versato anno" val={eur(totVers)} accent="#f87171"/>
+              <Stat label="Spese anno" val={eur(totSpA)} accent="#f87171"/>
             </div>
 
             {/* Grafico a barre — Movimento */}
@@ -1868,11 +1948,177 @@ export default function App() {
               </div>
             </div>
             <div style={{fontSize:11,color:"#334155",textAlign:"center"}}>Clicca su un mese per aprirlo</div>
+
+            {/* Grafico spese per mese */}
+            {totSpA>0&&(
+              <div style={{background:"var(--cp-bg3)",borderRadius:12,border:"1px solid var(--cp-border)",padding:14,marginTop:14}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#f87171",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Spese per Mese</div>
+                {annualData.map(m=>{
+                  if(!m.spTot) return (
+                    <div key={m.mi} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <div style={{width:32,fontSize:10,color:"var(--cp-text4)",fontWeight:700,flexShrink:0}}>{m.mName.slice(0,3)}</div>
+                      <div style={{fontSize:10,color:"var(--cp-text4)"}}>—</div>
+                    </div>
+                  );
+                  const pctCont = (m.spCont/maxSp)*100;
+                  const pctEle  = (m.spEle/maxSp)*100;
+                  return (
+                    <div key={m.mi} style={{marginBottom:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                        <span style={{fontSize:10,color:"var(--cp-text3)",fontWeight:700}}>{m.mName.slice(0,3).toUpperCase()}</span>
+                        <span style={{fontSize:11,fontWeight:800,color:"#f87171"}}>{eur(m.spTot)}</span>
+                      </div>
+                      <div style={{background:"var(--cp-bg4)",borderRadius:4,height:12,overflow:"hidden",display:"flex"}}>
+                        <div style={{height:"100%",width:`${pctCont}%`,background:"#f87171",borderRadius:"4px 0 0 4px"}}/>
+                        <div style={{height:"100%",width:`${pctEle}%`,background:"#fb923c"}}/>
+                      </div>
+                      <div style={{display:"flex",gap:12,marginTop:2,fontSize:9,color:"var(--cp-text4)"}}>
+                        {m.spCont>0&&<span style={{color:"#f87171"}}>💵 {eur(m.spCont)}</span>}
+                        {m.spEle>0&&<span style={{color:"#fb923c"}}>💳 {eur(m.spEle)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{display:"flex",gap:16,marginTop:8,fontSize:10}}>
+                  <span style={{color:"#f87171"}}>■ Contanti</span>
+                  <span style={{color:"#fb923c"}}>■ Elettronico</span>
+                </div>
+              </div>
+            )}
+
+            {/* Tabella spese annuali per categoria */}
+            {totSpA>0&&(
+              <div style={{background:"var(--cp-bg3)",borderRadius:12,border:"1px solid var(--cp-border)",padding:14,marginTop:14}}>
+                <div style={{fontSize:11,fontWeight:800,color:"#f87171",letterSpacing:1.5,textTransform:"uppercase",marginBottom:12}}>Spese Anno per Categoria</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                  <div style={{background:"var(--cp-bg4)",borderRadius:8,padding:10}}>
+                    <div style={{fontSize:9,color:"#f87171",fontWeight:800,marginBottom:6}}>💵 CONTANTI</div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:"var(--cp-text3)"}}>🛒 Merce</span>
+                      <span style={{color:"var(--cp-text)",fontWeight:700}}>{eur(totSpMerceCont)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                      <span style={{color:"var(--cp-text3)"}}>🏢 Fissi</span>
+                      <span style={{color:"var(--cp-text)",fontWeight:700}}>{eur(totSpFissoCont)}</span>
+                    </div>
+                  </div>
+                  <div style={{background:"var(--cp-bg4)",borderRadius:8,padding:10}}>
+                    <div style={{fontSize:9,color:"#fb923c",fontWeight:800,marginBottom:6}}>💳 ELETTRONICO</div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:"var(--cp-text3)"}}>🛒 Merce</span>
+                      <span style={{color:"var(--cp-text)",fontWeight:700}}>{eur(totSpMerceEle)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                      <span style={{color:"var(--cp-text3)"}}>🏢 Fissi</span>
+                      <span style={{color:"var(--cp-text)",fontWeight:700}}>{eur(totSpFissoEle)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderTop:"1px solid var(--cp-border)",fontSize:13,fontWeight:800}}>
+                  <span style={{color:"var(--cp-text)"}}>TOTALE SPESE ANNO</span>
+                  <span style={{color:"#f87171"}}>{eur(totSpA)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Export Excel anno intero */}
+            <button onClick={()=>exportExcelAnno(year,all,MONTHS,dim,dk,vk,mk,pk,AGGI_BAR_VOCI,AGGI_TAB_VOCI,aggiLabel,calcDay,n,eur)}
+              style={{width:"100%",background:"#052e16",color:"#4ade80",border:"2px solid #166534",
+                borderRadius:10,padding:14,fontSize:13,fontWeight:700,cursor:"pointer",
+                fontFamily:"inherit",marginTop:14}}>
+              📊 Esporta Excel — Anno {year} completo
+            </button>
           </div>
         );
       })()}
 
-      {/* ── PANNELLO IMPOSTAZIONI ── */}
+      {/* ── PANNELLO RICERCA ── */}
+      {showSearch&&(()=>{
+        const q = searchQuery.toLowerCase().trim();
+        // Raccogli tutte le spese e versamenti da tutti i giorni/mesi
+        const risultatiSpese = [];
+        const risultatiVers  = [];
+        Object.keys(all).forEach(key => {
+          // Spese giornaliere
+          if (key.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const dd = all[key];
+            const [y,m,d] = key.split("-").map(Number);
+            (dd.spese||[]).forEach((s,i) => {
+              const txt = `${s.dove||""} ${s.tipo||""} ${s.nota||""} ${n(s.contante)||""} ${n(s.elettronico)||""}`.toLowerCase();
+              if (!q || txt.includes(q)) {
+                risultatiSpese.push({
+                  data:`${String(d).padStart(2,"0")}/${String(m).padStart(2,"0")}/${y}`,
+                  dove:s.dove||"—", tipo:s.tipo||"merce",
+                  contante:n(s.contante), elettronico:n(s.elettronico), nota:s.nota||"",
+                  key, idx:i
+                });
+              }
+            });
+          }
+          // Versamenti mensili
+          if (key.match(/^versamenti_/)) {
+            const parts = key.split("_"); // versamenti_YYYY_M
+            const [,yr,mo] = parts;
+            (all[key]||[]).forEach((v,i) => {
+              const txt = `${v.banca||""} ${v.nota||""} ${n(v.importo)||""} ${v.data||""}`.toLowerCase();
+              if (!q || txt.includes(q)) {
+                risultatiVers.push({
+                  data: v.data || `${MONTHS[+mo]} ${yr}`,
+                  banca: v.banca||"—", importo: n(v.importo), nota: v.nota||""
+                });
+              }
+            });
+          }
+        });
+
+        return (
+          <div style={{background:"var(--cp-bg2)",borderBottom:"2px solid #60a5fa",padding:16}}>
+            <div style={{fontSize:11,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:10}}>🔍 RICERCA</div>
+            <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+              placeholder="Cerca per fornitore, banca, importo, nota..."
+              autoFocus
+              style={{width:"100%",background:"var(--cp-inp)",color:"var(--cp-text)",
+                border:"1px solid #60a5fa",borderRadius:8,padding:"10px 12px",
+                fontSize:14,fontFamily:"inherit",boxSizing:"border-box",marginBottom:12}}/>
+
+            {/* Risultati Spese */}
+            <div style={{fontSize:10,color:"#f87171",fontWeight:800,letterSpacing:1,marginBottom:6}}>
+              📋 SPESE ({risultatiSpese.length})
+            </div>
+            {risultatiSpese.length===0&&<div style={{fontSize:12,color:"var(--cp-text4)",marginBottom:12}}>Nessuna spesa trovata</div>}
+            {risultatiSpese.slice(0,30).map((s,i)=>(
+              <div key={i} style={{background:"var(--cp-bg3)",borderRadius:8,padding:"8px 12px",marginBottom:6,
+                border:"1px solid var(--cp-border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--cp-text)"}}>{s.dove} <span style={{color:"var(--cp-text4)",fontWeight:400}}>({s.tipo==="fisso"?"🏢 Fisso":"🛒 Merce"})</span></div>
+                  <div style={{fontSize:10,color:"var(--cp-text4)"}}>{s.data}{s.nota?` — ${s.nota}`:""}</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                  {s.contante>0&&<div style={{fontSize:12,color:"#f87171",fontWeight:700}}>💵 {eur(s.contante)}</div>}
+                  {s.elettronico>0&&<div style={{fontSize:12,color:"#fb923c",fontWeight:700}}>💳 {eur(s.elettronico)}</div>}
+                </div>
+              </div>
+            ))}
+            {risultatiSpese.length>30&&<div style={{fontSize:11,color:"var(--cp-text4)",marginBottom:8}}>...e altri {risultatiSpese.length-30}. Affina la ricerca.</div>}
+
+            {/* Risultati Versamenti */}
+            <div style={{fontSize:10,color:"#60a5fa",fontWeight:800,letterSpacing:1,margin:"12px 0 6px"}}>
+              🏛️ VERSAMENTI ({risultatiVers.length})
+            </div>
+            {risultatiVers.length===0&&<div style={{fontSize:12,color:"var(--cp-text4)"}}>Nessun versamento trovato</div>}
+            {risultatiVers.slice(0,20).map((v,i)=>(
+              <div key={i} style={{background:"var(--cp-bg3)",borderRadius:8,padding:"8px 12px",marginBottom:6,
+                border:"1px solid var(--cp-border)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--cp-text)"}}>{v.banca}</div>
+                  <div style={{fontSize:10,color:"var(--cp-text4)"}}>{v.data}{v.nota?` — ${v.nota}`:""}</div>
+                </div>
+                <div style={{fontSize:13,color:"#60a5fa",fontWeight:800,marginLeft:8}}>{eur(v.importo)}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       {showSettings&&(
         <div style={{background:"var(--cp-bg2)",borderBottom:"2px solid #60a5fa",padding:16}}>
           <div style={{fontSize:11,color:"#60a5fa",fontWeight:800,letterSpacing:1,marginBottom:14}}>⚙️ IMPOSTAZIONI</div>
