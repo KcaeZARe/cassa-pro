@@ -1514,6 +1514,18 @@ export default function App() {
   const mGuadagno    = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.guadagno:0),0);
   const mPosMensile  = monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.pos_bar:0),0);
   const mSpeseMensili= monthRows.reduce((s,x)=>s+(hasRealData(x.data)?x.calc.spese_tot:0),0);
+  // Totali spese mensili per categoria
+  const mSpeseCat = monthRows.reduce((acc,x)=>{
+    if (!hasRealData(x.data)) return acc;
+    (x.data.spese||[]).forEach(s=>{
+      const tipo = s.tipo==="fisso" ? "fisso" : "merce";
+      acc.contMerce  += tipo==="merce" ? n(s.contante) : 0;
+      acc.contFisso  += tipo==="fisso" ? n(s.contante) : 0;
+      acc.eleMerce   += tipo==="merce" ? n(s.elettronico) : 0;
+      acc.eleFisso   += tipo==="fisso" ? n(s.elettronico) : 0;
+    });
+    return acc;
+  }, {contMerce:0, contFisso:0, eleMerce:0, eleFisso:0});
 
   // ── PIN: early returns ──
   // dipCount: cerca i dipendenti in tutti i mesi disponibili (non solo quello corrente)
@@ -1701,6 +1713,26 @@ export default function App() {
             <Stat label="POS Bar mese" val={eur(mPosMensile)} accent="#a78bfa"/>
             <Stat label="Spese mese" val={eur(mSpeseMensili)} accent="#f87171"/>
           </div>
+
+          {/* Spese mensili per categoria */}
+          {mSpeseMensili>0&&(
+            <Block title="Spese Mese per Categoria" accent="#f87171">
+              {(mSpeseCat.contMerce>0||mSpeseCat.contFisso>0)&&<>
+                <div style={{fontSize:10,color:"#f87171",fontWeight:700,marginBottom:4}}>💵 CONTANTI</div>
+                {mSpeseCat.contMerce>0&&<RRow label="🛒 Merce" val={eur(mSpeseCat.contMerce)} color="var(--cp-text2)"/>}
+                {mSpeseCat.contFisso>0&&<RRow label="🏢 Costi fissi" val={eur(mSpeseCat.contFisso)} color="var(--cp-text2)"/>}
+                <RRow label="Totale contanti" val={eur(mSpeseCat.contMerce+mSpeseCat.contFisso)} color="#f87171" bold/>
+              </>}
+              {(mSpeseCat.eleMerce>0||mSpeseCat.eleFisso>0)&&<>
+                <div style={{fontSize:10,color:"#fb923c",fontWeight:700,margin:"10px 0 4px"}}>💳 ELETTRONICO</div>
+                {mSpeseCat.eleMerce>0&&<RRow label="🛒 Merce" val={eur(mSpeseCat.eleMerce)} color="var(--cp-text2)"/>}
+                {mSpeseCat.eleFisso>0&&<RRow label="🏢 Costi fissi" val={eur(mSpeseCat.eleFisso)} color="var(--cp-text2)"/>}
+                <RRow label="Totale elettronico" val={eur(mSpeseCat.eleMerce+mSpeseCat.eleFisso)} color="#fb923c" bold/>
+              </>}
+              <div style={{height:4}}/>
+              <RRow label="TOTALE SPESE MESE" val={eur(mSpeseMensili)} color="#f87171" bold/>
+            </Block>
+          )}
           <div style={{background:"var(--cp-bg3)",borderRadius:12,overflow:"hidden"}}>
             <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 1fr 1fr",padding:"10px 14px",background:"var(--cp-bg4)",fontSize:9,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,gap:6}}>
               <span>G</span><span>MOV.</span><span>SPESE</span><span>GUAD.</span><span>CASSA</span>
@@ -2715,30 +2747,26 @@ export default function App() {
                 <RRow label="Spese contanti" val={eur(calc.spese_cont)} color="#f87171"/>
                 <RRow label="Spese elettronico" val={eur(calc.spese_ele)} color="#fb923c"/>
                 <RRow label="TOTALE SPESE" val={eur(calc.spese_tot)} color="#f87171" bold/>
-                {(today.spese||[]).length>0&&<>
-                  <div style={{height:8}}/>
-                  <div style={{fontSize:10,color:"var(--cp-text4)",fontWeight:800,letterSpacing:1,marginBottom:6}}>DETTAGLIO</div>
-                  {/* Contanti */}
-                  {(today.spese||[]).filter(s=>n(s.contante)>0).length>0&&<>
-                    <div style={{fontSize:10,color:"#f87171",fontWeight:700,margin:"4px 0 2px"}}>💵 CONTANTI</div>
-                    {(today.spese||[]).filter(s=>n(s.contante)>0).map((s,i)=>(
-                      <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 8px",fontSize:12,borderBottom:"1px solid var(--cp-bg4)"}}>
-                        <span style={{color:"var(--cp-text2)"}}>{s.dove||"—"}{s.tipo&&s.tipo!=="merce"?` (${s.tipo})`:""}</span>
-                        <span style={{color:"#f87171",fontWeight:700}}>−{eur(n(s.contante))}</span>
-                      </div>
-                    ))}
-                  </>}
-                  {/* Elettronico */}
-                  {(today.spese||[]).filter(s=>n(s.elettronico)>0).length>0&&<>
-                    <div style={{fontSize:10,color:"#fb923c",fontWeight:700,margin:"8px 0 2px"}}>💳 ELETTRONICO</div>
-                    {(today.spese||[]).filter(s=>n(s.elettronico)>0).map((s,i)=>(
-                      <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"3px 8px",fontSize:12,borderBottom:"1px solid var(--cp-bg4)"}}>
-                        <span style={{color:"var(--cp-text2)"}}>{s.dove||"—"}{s.tipo&&s.tipo!=="merce"?` (${s.tipo})`:""}</span>
-                        <span style={{color:"#fb923c",fontWeight:700}}>−{eur(n(s.elettronico))}</span>
-                      </div>
-                    ))}
-                  </>}
-                </>}
+                {(today.spese||[]).length>0&&(()=>{
+                  const spese = today.spese||[];
+                  const contMerce  = spese.filter(s=>s.tipo==="merce" ||!s.tipo).reduce((s,x)=>s+n(x.contante),0);
+                  const contFisso  = spese.filter(s=>s.tipo==="fisso").reduce((s,x)=>s+n(x.contante),0);
+                  const eleMerce   = spese.filter(s=>s.tipo==="merce" ||!s.tipo).reduce((s,x)=>s+n(x.elettronico),0);
+                  const eleFisso   = spese.filter(s=>s.tipo==="fisso").reduce((s,x)=>s+n(x.elettronico),0);
+                  return (<>
+                    <div style={{height:8}}/>
+                    {(contMerce>0||contFisso>0)&&<>
+                      <div style={{fontSize:10,color:"#f87171",fontWeight:700,margin:"4px 0 4px"}}>💵 CONTANTI</div>
+                      {contMerce>0&&<RRow label="🛒 Merce" val={eur(contMerce)} color="var(--cp-text2)"/>}
+                      {contFisso>0&&<RRow label="🏢 Costi fissi" val={eur(contFisso)} color="var(--cp-text2)"/>}
+                    </>}
+                    {(eleMerce>0||eleFisso>0)&&<>
+                      <div style={{fontSize:10,color:"#fb923c",fontWeight:700,margin:"8px 0 4px"}}>💳 ELETTRONICO</div>
+                      {eleMerce>0&&<RRow label="🛒 Merce" val={eur(eleMerce)} color="var(--cp-text2)"/>}
+                      {eleFisso>0&&<RRow label="🏢 Costi fissi" val={eur(eleFisso)} color="var(--cp-text2)"/>}
+                    </>}
+                  </>);
+                })()}
               </Block>
 
               {/* POS Distributore — solo annotazione */}
