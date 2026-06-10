@@ -576,8 +576,11 @@ const pgk = () => "pagamenti_globali";
 const emptyPagamento = () => ({ motivo:"", importo:"", data_scadenza:"", pagato:false, data_pagato:"" });
 
 const emptyDipendente = () => ({
+  id: "d"+Date.now()+Math.floor(Math.random()*1000), // ID unico permanente — mai riusato
   nome:"", ruolo:"bar", stipendio:"", ore_mensili:"", turni_mensili:"",
   maggiorazione:"25", data_pagamento:"" });
+// ID dipendente: per chi esiste già senza id, la migrazione assegna id=indice (così i dati storici restano collegati)
+const dipId = (dip, idx) => dip?.id ?? String(idx);
 const emptyPresenza = () => ({
   entrata:"", uscita:"", ore_manuali:"", tipo:"lavoro",
   turno_pranzo:false, turno_cena:false,
@@ -724,7 +727,7 @@ const exportExcel = ({ all, year, month, MONTHS, dim, dk, emptyDay, calcDay, n,
     const tariffa = n(dip.stipendio) / (n(dip.ore_mensili) || 1);
     let oreTot = 0, straoTot = 0, anticipiTot = 0;
     for (let d = 1; d <= days; d++) {
-      const presKey = `${idx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+      const presKey = `${dipId(dip,idx)}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
       const p = (personale.presenze || {})[presKey] || {};
       if (p.tipo === "lavoro" || !p.tipo) {
         if (p.entrata && p.uscita) {
@@ -973,7 +976,7 @@ function DipendentView({ all, year, month, day, setYear, setMonth, setDay,
   const isPast  = new Date(year,month,day) < new Date(todayY,todayM,todayD);
 
   const save = (updated) => { onSave(updated); setFlash(true); setTimeout(()=>setFlash(false),1200); };
-  const presKey = (idx, d) => `${idx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+  const presKey = (idx, d) => { const id = dipId((personale.dipendenti||[])[idx], idx); return `${id}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`; };
   const getP = (idx, d) => (personale.presenze||{})[presKey(idx,d)] || { entrata:"", uscita:"", tipo:"lavoro", nota:"" };
   const updP = (idx, d, f, v) => {
     const k = presKey(idx,d);
@@ -1172,6 +1175,24 @@ export default function App() {
   const [all, setAll] = useState(load);
 
   // ── PIN STATE v3 ──
+  // Migrazione ID dipendenti: assegna id=indice ai dipendenti esistenti senza id
+  // (così presenze e PIN storici, salvati per indice, restano collegati)
+  useEffect(() => {
+    if (localStorage.getItem("cassapro_dipid_migrated")) return;
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)||"{}");
+    let changed = false;
+    Object.keys(stored).forEach(k => {
+      if (k.startsWith("personale_") && stored[k]?.dipendenti) {
+        stored[k].dipendenti = stored[k].dipendenti.map((d,i) => {
+          if (!d.id) { changed = true; return {...d, id: String(i)}; }
+          return d;
+        });
+      }
+    });
+    if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(stored)); setAll(stored); }
+    localStorage.setItem("cassapro_dipid_migrated","1");
+  }, []);
+
   // Migrazione: se esistono PIN dipendenti (impostati con 4 cifre), li rimuove
   // e mostra avviso al prossimo accesso admin
   useEffect(() => {
@@ -1436,7 +1457,7 @@ export default function App() {
     savePers({...personale, dipendenti: dips});
   };
 
-  const presKey = (dipIdx, d) => `${dipIdx}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`;
+  const presKey = (dipIdx, d) => { const id = dipId((personale.dipendenti||[])[dipIdx], dipIdx); return `${id}_${year}_${String(month+1).padStart(2,"0")}_${String(d).padStart(2,"0")}`; };
   const getPresenza = (dipIdx, d) => (personale.presenze||{})[presKey(dipIdx,d)] || emptyPresenza();
   const updPresenza = (dipIdx, d, f, v) => {
     const pk2 = presKey(dipIdx, d);
@@ -1634,7 +1655,11 @@ export default function App() {
       const keys = Object.keys(localStorage).filter(k=>k.startsWith(DIP_PIN_PREFIX));
       for (const k of keys) {
         if (localStorage.getItem(k) === hash) {
-          return parseInt(k.replace(DIP_PIN_PREFIX,""), 10);
+          const id = k.replace(DIP_PIN_PREFIX,"");
+          // Risolve ID -> indice nel mese corrente
+          const dips = all[pk(year,month)]?.dipendenti||[];
+          const idx = dips.findIndex((d,i)=>dipId(d,i)===id);
+          return idx;
         }
       }
       return -1;
@@ -2524,7 +2549,7 @@ export default function App() {
                       </div>
                       <div style={{display:"flex",gap:8}}>
                         <button onClick={()=>{
-                          removeDipIdxPIN(selDip);
+                          removeDipIdxPIN(dipId(dip,selDip));
                           delDipendente(selDip);
                           setSelDip(null);
                           setConfirmDelDip(null);
@@ -2542,17 +2567,17 @@ export default function App() {
                   {/* PIN DIPENDENTE */}
                   <Block title="Accesso Dipendente" accent="#60a5fa">
                     <div style={{fontSize:11,color:"var(--cp-text3)",marginBottom:10}}>
-                      {hasDipIdxPIN(selDip)
+                      {hasDipIdxPIN(dipId(dip,selDip))
                         ? `PIN attivo — ${dip.nome||"questo dipendente"} può accedere all'area presenze.`
                         : `Nessun PIN — ${dip.nome||"questo dipendente"} non può ancora accedere.`}
                     </div>
                     <div style={{display:"flex",gap:8}}>
-                      <button onClick={()=>{ setPinModeTarget(selDip); setPinMode("setup_dip_idx"); }}
+                      <button onClick={()=>{ setPinModeTarget(dipId(dip,selDip)); setPinMode("setup_dip_idx"); }}
                         style={{flex:1,background:"var(--cp-bg2)",color:"#60a5fa",border:"1px solid #1e3a5f",
                           borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                        {hasDipIdxPIN(selDip) ? "🔄 Cambia PIN" : "🔒 Imposta PIN"}
+                        {hasDipIdxPIN(dipId(dip,selDip)) ? "🔄 Cambia PIN" : "🔒 Imposta PIN"}
                       </button>
-                      {hasDipIdxPIN(selDip)&&(
+                      {hasDipIdxPIN(dipId(dip,selDip))&&(
                         <button onClick={()=>setConfirmRemPinDip(selDip)}
                           style={{flex:1,background:"#1a0a0a",color:"#f87171",border:"1px solid #7f1d1d",
                             borderRadius:8,padding:10,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
@@ -2564,7 +2589,7 @@ export default function App() {
                       <div style={{background:"#1a0505",border:"1px solid #7f1d1d",borderRadius:10,padding:12,marginTop:10}}>
                         <div style={{fontSize:12,color:"#f87171",marginBottom:10}}>Rimuovere il PIN di {dip.nome}? Non potrà più accedere.</div>
                         <div style={{display:"flex",gap:8}}>
-                          <button onClick={()=>{ removeDipIdxPIN(selDip); setConfirmRemPinDip(null); }}
+                          <button onClick={()=>{ removeDipIdxPIN(dipId(dip,selDip)); setConfirmRemPinDip(null); }}
                             style={{flex:1,background:"#7f1d1d",color:"#fca5a5",border:"none",borderRadius:7,padding:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Sì, rimuovi</button>
                           <button onClick={()=>setConfirmRemPinDip(null)}
                             style={{flex:1,background:"var(--cp-border)",color:"var(--cp-text2)",border:"none",borderRadius:7,padding:9,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Annulla</button>
