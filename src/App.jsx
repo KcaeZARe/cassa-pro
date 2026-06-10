@@ -2662,9 +2662,19 @@ export default function App() {
 
                   {/* PRESENZE GIORNALIERE */}
                   <Block title="Presenze Giornaliere" accent="#a78bfa">
-                    {Array.from({length:dim(year,month)},(_,gi)=>{
-                      // Ordine inverso: oggi in cima, passati sotto
-                      const d = dim(year,month) - gi;
+                    {(()=>{
+                      const totalDays = dim(year,month);
+                      const now2 = new Date();
+                      const isCurrentMonth = month===now2.getMonth()&&year===now2.getFullYear();
+                      const todayD = isCurrentMonth ? now2.getDate() : null;
+                      // Ordine: oggi → passati decrescenti → futuri crescenti
+                      const order = [];
+                      if (todayD) order.push(todayD);
+                      for (let x = (todayD||totalDays)-1; x >= 1; x--) order.push(x);
+                      if (todayD) for (let x = todayD+1; x <= totalDays; x++) order.push(x);
+                      else for (let x = totalDays; x >= 1; x--) order.push(x);
+                      return order;
+                    })().map((d,gi)=>{
                       const p = getPresenza(selDip,d);
                       const ore = n(p.ore_manuali)>0 ? n(p.ore_manuali) : calcOre(p.entrata,p.uscita);
                       const wd = new Date(year,month,d).toLocaleDateString("it-IT",{weekday:"short"});
